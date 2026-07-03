@@ -584,7 +584,11 @@ def login():
 @app.route("/api/documents", methods=["GET"])
 @require_supabase
 def list_documents():
-    res = supabase.table("documents").select("*").order("updated_at", desc=True).execute()
+    uploaded_by = (request.args.get("uploaded_by") or "").strip()
+    q = supabase.table("documents").select("*")
+    if uploaded_by:
+        q = q.eq("uploaded_by", uploaded_by)
+    res = q.order("updated_at", desc=True).execute()
     return jsonify(res.data), 200
 
 

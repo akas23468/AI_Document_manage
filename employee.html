@@ -1298,8 +1298,9 @@ let currentViewingDoc = null;
 let pendingUploadFile = null;
 
 async function loadDocuments() {
+    const uploadedByQuery = CU && CU.name ? `?uploaded_by=${encodeURIComponent(CU.name)}` : '';
     try {
-        const docs = await apiCall('/documents');
+        const docs = await apiCall('/documents' + uploadedByQuery);
         myDocuments = docs;
         renderDocsTable();
         return docs;
@@ -1935,15 +1936,18 @@ async function submitTicket() {
 
 async function refreshOverviewStats() {
     try {
-        const [docs, tickets] = await Promise.all([
-            apiCall('/documents'),
-            apiCall('/maintenance')
+        const uploadedBy = CU && CU.name ? CU.name : '';
+        const [docs, tickets, approvals] = await Promise.all([
+            apiCall('/documents' + (uploadedBy ? '?uploaded_by=' + encodeURIComponent(uploadedBy) : '')),
+            apiCall('/maintenance'),
+            uploadedBy ? apiCall('/approvals?submitted_by=' + encodeURIComponent(uploadedBy)) : Promise.resolve([])
         ]);
         const openTickets = tickets.filter(t => t.status !== 'Resolved');
         const updatedDocs = docs.filter(d => d.status === 'Updated');
+        const ownUploads = docs.length + approvals.length;
 
         const setText = (id, val) => { const e = document.getElementById(id); if(e) e.textContent = val; };
-        setText('stat-docs', docs.length);
+        setText('stat-docs', ownUploads);
         setText('stat-updated-docs', updatedDocs.length);
         setText('stat-open-incidents', openTickets.length);
     } catch (err) {
