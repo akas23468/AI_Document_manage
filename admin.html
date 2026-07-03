@@ -1,0 +1,1954 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>OnlyTech — Admin Command Center</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+
+<style>
+:root {
+  /* Monochrome / Premium Palette based on reference image */
+  --brand: #1A1A1A; 
+  --brand-hover: #000000;
+  --bg-color: #E2E8F0;
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.5);
+  
+  --card: #ffffff;
+  --card-dark: #1A1A1A;
+  --border: rgba(0, 0, 0, 0.08);
+  
+  --text: #1a1a2e;
+  --text-inverse: #ffffff;
+  --muted: #6B7280;
+  --muted-inverse: #9CA3AF;
+  
+  /* Semantic colors kept for alerts/status, slightly muted */
+  --ok: #10B981; 
+  --err: #EF4444; 
+  --warn: #F59E0B; 
+  --info: #3B82F6;
+}
+
+* { box-sizing:border-box; margin:0; padding:0; }
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: var(--bg-color);
+  background-image: 
+      radial-gradient(at 0% 0%, hsla(253,16%,7%,0.05) 0, transparent 50%), 
+      radial-gradient(at 50% 0%, hsla(225,39%,30%,0.05) 0, transparent 50%), 
+      radial-gradient(at 100% 0%, hsla(339,49%,30%,0.05) 0, transparent 50%);
+  color: var(--text);
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #CBD5E1; border-radius: 10px; }
+::-webkit-scrollbar-thumb:hover { background: #94A3B8; }
+
+.pg { display:none; width: 100%; height: 100%; justify-content: center; align-items: center;}
+.pg.show { display:flex; }
+#pg-dash.show { display:flex; }
+
+.login-wrap { 
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: 2rem;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.1);
+    width: 100%; 
+    max-width: 1000px;
+    height: 80vh;
+    display: flex; 
+    overflow: hidden;
+}
+.login-left { 
+    flex: 1.2; 
+    background: #FAFAFA;
+    display: flex; 
+    position: relative; 
+    overflow: hidden;
+}
+
+.login-right { 
+    flex: 1; 
+    display: flex; 
+    align-items: center; 
+    justify-content: center; 
+    padding: 40px; 
+    background: rgba(255,255,255,0.5);
+}
+.login-box { width: 100%; max-width: 380px; }
+.login-box h2 { font-size: 28px; font-weight: 800; margin-bottom: 8px; color: var(--text); }
+.login-box p { color: var(--muted); font-size: 14px; margin-bottom: 32px; }
+
+.fg { margin-bottom: 20px; }
+.fg label { font-size: 12px; font-weight: 700; color: var(--text); display: block; margin-bottom: 8px; }
+.fg .iw { position: relative; }
+.fg .iw svg.ico { position: absolute; left: 16px; top: 50%; transform: translateY(-50%); color: #94a3b8; pointer-events: none; width: 18px; height: 18px; }
+.fg input, .fg select, .fg textarea { 
+    width: 100%; 
+    padding: 14px 16px 14px 44px; 
+    border: 1px solid rgba(0,0,0,0.1); 
+    border-radius: 1rem; 
+    font-size: 14px; 
+    color: var(--text); 
+    background: #fff; 
+    outline: none; 
+    transition: all .2s; 
+    font-family: 'Inter', sans-serif; 
+}
+.fg textarea { padding-left: 16px; resize: vertical; min-height: 100px; border-radius: 1rem; }
+.fg input:focus, .fg select:focus, .fg textarea:focus { border-color: var(--brand); box-shadow: 0 0 0 4px rgba(0,0,0,.05); }
+.fg input::placeholder, .fg textarea::placeholder { color: #94a3b8; }
+.fg-nolic { padding-left: 16px !important; }
+
+/* Password visibility toggle */
+.fg .iw input[type="password"],
+.fg .iw input.pwd-field { padding-right: 44px; }
+.pwd-toggle {
+  position: absolute; right: 14px; top: 50%; transform: translateY(-50%);
+  background: none; border: none; padding: 4px; margin: 0; cursor: pointer;
+  color: #94a3b8; display: flex; align-items: center; justify-content: center;
+  transition: color .2s;
+}
+.pwd-toggle:hover { color: var(--text); }
+.pwd-toggle svg { width: 18px; height: 18px; display: block; }
+.pwd-toggle .eye-off { display: none; }
+.pwd-toggle.is-visible .eye-on { display: none; }
+.pwd-toggle.is-visible .eye-off { display: block; }
+
+.btn { 
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px; 
+    padding: 12px 24px; border-radius: 2rem;
+    font-size: 14px; font-weight: 600; cursor: pointer; border: none; outline: none; 
+    transition: all .2s; font-family: 'Inter', sans-serif; 
+}
+.btn-p { background: var(--brand); color: #fff; width: 100%; }
+.btn-p:hover { background: var(--brand-hover); transform: translateY(-2px); box-shadow: 0 10px 20px -10px rgba(0,0,0,0.5); }
+.btn-p:disabled { opacity: .6; cursor: not-allowed; transform: none; }
+.btn-ok { background: var(--brand); color: #fff; }
+.btn-ok:hover { transform: translateY(-2px); box-shadow: 0 10px 20px -10px rgba(0,0,0,0.5); }
+.btn-err { background: var(--err); color: #fff; }
+.btn-err:hover { transform: translateY(-2px); box-shadow: 0 10px 20px -10px rgba(239,68,68,0.5); }
+.btn-out { background: #fff; color: var(--text); border: 1px solid var(--border); }
+.btn-out:hover { background: #F8FAFC; border-color: #cbd5e1; }
+.btn-sm { padding: 8px 16px; font-size: 12px; }
+.btn:disabled { opacity: .6; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+
+.dash {
+    background: var(--glass-bg);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border: 1px solid var(--glass-border);
+    border-radius: 2rem;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.1);
+    width: 96vw;
+    height: 94vh;
+    display: flex;
+    overflow: hidden;
+    position: relative;
+}
+
+.sidebar {
+    width: 280px;
+    padding: 2rem;
+    border-right: 1px solid rgba(0,0,0,0.05);
+    display: flex;
+    flex-direction: column;
+    background: rgba(255,255,255,0.4);
+}
+.sb-logo { padding-bottom: 24px; border-bottom: none; margin-bottom: 16px; }
+.sb-logo .sbn { font-size: 24px; font-weight: 900; color: var(--text); display: flex; align-items: center; gap: 12px; letter-spacing: -0.5px;}
+.sb-logo .sbs { font-size: 11px; color: var(--muted); font-weight: 700; letter-spacing: 1px; text-transform: uppercase; margin-top: 4px; margin-left: 52px;}
+
+.sb-nav { flex: 1; overflow-y: auto; padding-right: 10px;}
+.sb-sect { font-size: 11px; font-weight: 700; letter-spacing: 0.5px; text-transform: uppercase; color: var(--muted); padding: 8px 10px 5px; margin-top: 16px; margin-bottom: 8px; }
+.sb-item {
+    display: flex; align-items: center; gap: 12px; 
+    padding: 12px 16px; border-radius: 1rem;
+    margin-bottom: 4px; color: var(--muted); font-size: 14px; font-weight: 600; 
+    cursor: pointer; transition: all .2s;
+}
+.sb-item svg { flex-shrink: 0; width: 20px; height: 20px; }
+.sb-item:hover { background: rgba(0,0,0,0.04); color: var(--text); }
+.sb-item.on { background: var(--brand); color: #fff; }
+
+.sb-foot { padding-top: 16px; margin-top: auto; }
+.sb-user { display: flex; align-items: center; gap: 14px; padding: 12px 16px; border-radius: 1.25rem; background: #fff; box-shadow: 0 4px 15px rgba(0,0,0,0.04); border: 1px solid rgba(0,0,0,0.02);}
+.sb-av { width: 48px; height: 48px; border-radius: 50%; background: #E5E7EB; overflow: hidden; display: flex; align-items: center; justify-content: center; flex-shrink: 0; border: 1px solid rgba(0,0,0,0.05);}
+.sb-av svg { width: 100%; height: 100%; display: block; }
+.sb-un { font-size: 15px; font-weight: 800; color: #1e1e2f; letter-spacing: -0.3px;}
+.sb-ur { font-size: 13px; color: #6B7280; font-weight: 600; margin-top: 2px; }
+
+.main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+.topbar {
+    height: 80px; padding: 0 40px; display: flex; align-items: center; justify-content: space-between;
+    background: transparent; z-index: 50; flex-shrink: 0;
+}
+.tt { font-size: 24px; font-weight: 800; }
+.tb-r { display: flex; align-items: center; gap: 16px; }
+.tb-btn {
+    width: 44px; height: 44px; border-radius: 50%; border: none; background: #fff;
+    display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text); 
+    transition: all .2s; box-shadow: 0 4px 10px rgba(0,0,0,0.03);
+}
+.tb-btn:hover { transform: translateY(-2px); box-shadow: 0 6px 15px rgba(0,0,0,0.08); }
+
+.main-scroll { flex: 1; overflow-y: auto; padding: 0 40px 40px 40px; }
+.section { display: none; }
+.section.on { display: block; animation: fadeUp 0.3s ease; }
+@keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+.stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 24px; margin-bottom: 24px; }
+.sc { 
+    background: var(--card); border: none; border-radius: 1.5rem; padding: 24px; 
+    transition: all .2s; box-shadow: 0 4px 15px rgba(0,0,0,0.03); display: flex; flex-direction: column; justify-content: center;
+}
+.sc.dark { background: var(--card-dark); color: var(--text-inverse); }
+.sc.dark .sc-l { color: var(--muted-inverse); }
+.sc.dark .sc-v { color: var(--text-inverse); }
+.sc.dark .sc-i { background: rgba(255,255,255,0.1); color: #fff; }
+
+.sc-h { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; }
+.sc-l { font-size: 13px; font-weight: 600; color: var(--muted); }
+.sc-i { width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center; justify-content: center; background: #F3F4F6; color: var(--text); }
+.sc-v { font-size: 32px; font-weight: 800; letter-spacing: -1px; color: var(--text); }
+.sc-s { font-size: 12px; font-weight: 600; margin-top: 8px; display:inline-block; padding: 4px 8px; border-radius: 1rem; background: #F3F4F6; }
+.sc.dark .sc-s { background: rgba(255,255,255,0.1); }
+
+.card { 
+    background: var(--card); border: none; border-radius: 1.5rem; margin-bottom: 24px; 
+    box-shadow: 0 4px 15px rgba(0,0,0,0.03); overflow: hidden; 
+}
+.ch { padding: 24px 28px; border-bottom: 1px solid rgba(0,0,0,0.04); display: flex; align-items: center; justify-content: space-between; background: #fff; }
+.ct { font-size: 18px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
+.cs { font-size: 13px; color: var(--muted); margin-top: 6px; font-weight: 500; }
+.cb { padding: 28px; }
+
+.chart-v { display: flex; align-items: flex-end; justify-content: space-between; height: 180px; padding-top: 10px; gap:16px;}
+.c-col { display: flex; flex-direction: column; align-items: center; flex: 1; gap: 12px; }
+.c-bar-wrap { width: 100%; max-width: 40px; height: 130px; background: #F3F4F6; border-radius: 1rem; position: relative; display: flex; align-items: flex-end; }
+.c-bar { width: 100%; background: var(--brand); border-radius: 1rem; transition: height 1s ease; min-height: 4px; position: relative;}
+.c-val { position: absolute; top: -22px; left: 0; width: 100%; text-align: center; font-size: 12px; font-weight: 800; color: var(--text); } 
+.c-lbl { font-size: 12px; font-weight: 700; color: var(--muted); }
+
+.chart-h { display: flex; flex-direction: column; justify-content: center; gap: 24px; min-height: 130px;}
+.h-row { display: flex; flex-direction: column; gap: 10px; }
+.h-lbl { display: flex; justify-content: space-between; font-size: 13px; font-weight: 700; color: var(--text); }
+.h-track { width: 100%; height: 12px; background: #F3F4F6; border-radius: 1rem; overflow: hidden; }
+.h-fill { height: 100%; background: var(--brand); border-radius: 1rem; }
+.h-fill.light { background: #9CA3AF; }
+.empty-note { font-size: 13px; color: var(--muted); font-weight: 500; text-align: center; padding: 20px 0; }
+
+.act-item { display: flex; align-items: flex-start; gap: 16px; margin-bottom: 24px; position: relative; }
+.act-item:last-child { margin-bottom: 0; }
+.act-item::before { content: ''; position: absolute; left: 5px; top: 16px; bottom: -30px; width: 2px; background: rgba(0,0,0,0.05); z-index: 0; }
+.act-item:last-child::before { display: none; }
+.act-dot { width: 12px; height: 12px; border-radius: 50%; background: var(--brand); flex-shrink: 0; margin-top: 4px; position: relative; z-index: 1; border: 3px solid var(--card); box-sizing: content-box; }
+.act-dot.light { background: #9CA3AF; }
+.act-dot.outline { background: #fff; border-color: var(--brand); }
+.act-txt { font-size: 14px; color: var(--text); flex: 1; line-height: 1.5; font-weight: 500;}
+.act-time { font-size: 12px; font-weight: 600; color: var(--muted); white-space: nowrap; margin-top:2px; }
+
+.doc-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 20px; padding: 24px; background: transparent; }
+.doc-card { 
+    background: #fff; border-radius: 1.5rem; padding: 24px; display:flex; flex-direction:column; 
+    transition:all 0.2s; box-shadow: 0 4px 15px rgba(0,0,0,0.03); cursor: pointer; position: relative; 
+}
+.doc-card:hover { transform: translateY(-4px); box-shadow: 0 12px 24px rgba(0,0,0,0.06); }
+.dc-top { display:flex; align-items:flex-start; justify-content:space-between; margin-bottom:20px; gap:12px; }
+.dc-icon { font-size:24px; flex-shrink:0; }
+.dc-title { font-weight: 700; font-size: 16px; color:var(--text); line-height: 1.3; margin-top: 2px;}
+.dc-meta { font-size: 12px; font-weight: 600; color: var(--muted); display: flex; justify-content: space-between; align-items: flex-end; margin-top:auto;}
+.dc-hist-btn { width: 36px; height: 36px; border-radius: 50%; background: #F3F4F6; border: none; cursor: pointer; color: var(--text); display: flex; align-items: center; justify-content: center; transition: all 0.2s; flex-shrink:0; }
+.dc-hist-btn:hover { background: var(--brand); color: #fff; }
+.dc-del-btn { width: 36px; height: 36px; border-radius: 50%; background: rgba(239,68,68,0.1); border: none; cursor: pointer; color: var(--err); display: flex; align-items: center; justify-content: center; transition: all 0.2s; flex-shrink:0; }
+.dc-del-btn:hover { background: var(--err); color: #fff; }
+.dc-actions { display:flex; gap:8px; flex-shrink:0; }
+
+.tbl { overflow-x: auto; padding: 0 8px 8px 8px;}
+table { width: 100%; border-collapse: separate; border-spacing: 0 8px; }
+th, td { padding: 16px 24px; text-align: left; font-size: 14px; }
+th { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .5px; border-bottom: 1px solid rgba(0,0,0,0.05);}
+td { background: #fff; vertical-align: middle; }
+tr td:first-child { border-top-left-radius: 1rem; border-bottom-left-radius: 1rem; }
+tr td:last-child { border-top-right-radius: 1rem; border-bottom-right-radius: 1rem; }
+tr:hover td { background: #F9FAFB; }
+
+.pill { padding: 6px 12px; border-radius: 20px; font-size: 11px; font-weight: 700; display: inline-flex; align-items: center; gap: 6px; }
+.pill-g { background: #F3F4F6; color: var(--text); border: 1px solid rgba(0,0,0,0.1);}
+.pill-b { background: var(--brand); color: #fff; }
+.pill-dark { background: #000; color: #fff; }
+
+.pill-active { background: rgba(16,185,129,0.1); color: var(--ok); border: 1px solid rgba(16,185,129,0.2); }
+.pill-draft { background: rgba(245,158,11,0.1); color: var(--warn); border: 1px solid rgba(245,158,11,0.2); }
+.pill-reject { background: rgba(239,68,68,0.1); color: var(--err); border: 1px solid rgba(239,68,68,0.2); }
+
+.user-cell { display: flex; align-items: center; gap: 12px; }
+.user-av { width: 36px; height: 36px; border-radius: 50%; background: #F3F4F6; color: var(--text); display: flex; align-items: center; justify-content: center; font-size: 14px; font-weight: 700; }
+.user-info .un { font-weight: 700; color: var(--text); font-size: 14px; }
+
+.setting-row { display: flex; justify-content: space-between; align-items: center; padding: 20px 0; border-bottom: 1px solid rgba(0,0,0,0.04); }
+.setting-row:last-child { border-bottom: none; padding-bottom: 0; }
+.sr-info h4 { font-size: 15px; font-weight: 700; color: var(--text); margin-bottom: 6px; }
+.sr-info p { font-size: 13px; font-weight: 500; color: var(--muted); }
+
+.switch { position: relative; display: inline-block; width: 48px; height: 26px; flex-shrink: 0; }
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #cbd5e1; transition: .3s; border-radius: 24px; }
+.slider:before { position: absolute; content: ""; height: 20px; width: 20px; left: 3px; bottom: 3px; background-color: white; transition: .3s; border-radius: 50%; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+input:checked + .slider { background-color: var(--brand); }
+input:checked + .slider:before { transform: translateX(22px); }
+
+.timeline { position: relative; padding-left: 24px; border-left: 2px solid rgba(0,0,0,0.05); margin-top: 16px; }
+.timeline-item { position: relative; margin-bottom: 24px; }
+.timeline-item:last-child { margin-bottom: 0; }
+.timeline-dot { position: absolute; left: -31px; top: 4px; width: 12px; height: 12px; border-radius: 50%; background: #fff; border: 3px solid var(--muted); }
+.timeline-item.active .timeline-dot { border-color: var(--brand); background: var(--brand); }
+.timeline-content { background: #F9FAFB; padding: 16px 20px; border-radius: 1rem; border: 1px solid rgba(0,0,0,0.04); }
+.tl-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.tl-title { font-weight: 800; font-size: 14px; color: var(--text); }
+.tl-date { font-size: 12px; font-weight: 600; color: var(--muted); }
+
+.diff-viewer { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.diff-pane { border: 1px solid rgba(0,0,0,0.08); border-radius: 1.5rem; overflow: hidden; display: flex; flex-direction: column; }
+.diff-header { padding: 16px 20px; background: #fff; border-bottom: 1px solid rgba(0,0,0,0.04); font-size: 12px; font-weight: 800; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; display: flex; justify-content: space-between;}
+.diff-content { padding: 20px; font-size: 14px; line-height: 1.7; color: var(--text); flex: 1; background: #F9FAFB; white-space: pre-wrap; font-family: 'Inter', sans-serif; max-height: 320px; overflow-y:auto;}
+.diff-old del { background: rgba(0,0,0,0.1); text-decoration: line-through; color: var(--muted); padding: 2px 4px; border-radius: 4px; }
+.diff-new ins { background: rgba(0,0,0,0.05); border-bottom: 2px solid var(--brand); text-decoration: none; color: var(--text); padding: 2px 4px; border-radius: 4px; }
+
+.ai-score-badge { display:inline-flex; align-items:center; gap:8px; padding:10px 16px; border-radius:1rem; font-size:13px; font-weight:700; margin-bottom:20px; }
+.ai-score-badge.high { background: rgba(16,185,129,0.1); color: var(--ok); }
+.ai-score-badge.mid { background: rgba(245,158,11,0.1); color: var(--warn); }
+.ai-score-badge.low { background: rgba(239,68,68,0.1); color: var(--err); }
+
+.threshold-note { display:flex; flex-wrap:wrap; gap:10px; padding:16px 28px; background:#F9FAFB; border-bottom:1px solid rgba(0,0,0,0.04); font-size:12px; font-weight:600; color:var(--muted); align-items:center; }
+.threshold-note .tn-pill { display:inline-flex; align-items:center; gap:6px; padding:5px 10px; border-radius:20px; font-weight:700; }
+.threshold-note .tn-pill.hi { background: rgba(16,185,129,0.1); color: var(--ok); }
+.threshold-note .tn-pill.mid { background: rgba(245,158,11,0.1); color: var(--warn); }
+.threshold-note .tn-pill.lo { background: rgba(239,68,68,0.1); color: var(--err); }
+
+.live-dot { width:7px; height:7px; border-radius:50%; background: var(--ok); display:inline-block; margin-right:6px; animation: pulseDot 1.6s ease-in-out infinite; }
+@keyframes pulseDot { 0%,100% { opacity:1; } 50% { opacity:.35; } }
+
+.modal-overlay {position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(255,255,255,0.4); backdrop-filter:blur(8px); -webkit-backdrop-filter: blur(8px); z-index:999; display:none; align-items:center; justify-content:center; opacity:0; transition:opacity 0.2s; padding:20px;}
+.modal-overlay.show {display:flex; opacity:1;}
+.modal-box {background:var(--card); width:100%; border-radius:2rem; box-shadow:0 25px 50px -12px rgba(0,0,0,0.15); transform:translateY(20px); transition:transform 0.3s ease; overflow:hidden; max-height: 90vh; display: flex; flex-direction: column; border: 1px solid rgba(0,0,0,0.05);}
+.modal-overlay.show .modal-box {transform:translateY(0);}
+.modal-box.sm { max-width:420px; }
+.modal-box.md { max-width:600px; }
+.modal-box.lg { max-width:900px; }
+.modal-header {padding:24px 32px; border-bottom:1px solid rgba(0,0,0,0.04); display:flex; justify-content:space-between; align-items:center; background:#fff; flex-shrink: 0;}
+.modal-title {font-size: 20px; font-weight:800; display:flex; align-items:center; gap:10px;}
+.modal-close {background: #F3F4F6; border:none; border-radius: 50%; width: 36px; height: 36px; cursor:pointer; color:var(--text); display:flex; align-items:center; justify-content:center; transition: all 0.2s;}
+.modal-close:hover {background: var(--brand); color: #fff;}
+.modal-body {padding:32px; overflow-y: auto; flex: 1; background: #F9FAFB;}
+.modal-footer {padding:20px 32px; border-top:1px solid rgba(0,0,0,0.04); display:flex; justify-content:flex-end; gap:12px; background:#fff; flex-shrink: 0;}
+
+.dash-grid { display:grid; grid-template-columns: repeat(2, 1fr); gap:24px; }
+.wide-card { grid-column: span 2; }
+
+#toasts {position:fixed; top:3vh; right:2vw; z-index:9999; display:flex; flex-direction:column; gap:12px;}
+.toast {display:flex; align-items:center; gap:16px; padding:16px 20px; border-radius:1.5rem; min-width:300px; max-width:400px; background:var(--card); box-shadow:0 10px 40px -10px rgba(0,0,0,.15); animation:tin .3s cubic-bezier(0.175, 0.885, 0.32, 1.275); font-size:14px; border:1px solid rgba(0,0,0,0.05);}
+.toast.ok {border-left: 4px solid var(--brand);}
+.toast.wa {border-left: 4px solid var(--brand);}
+.toast.er {border-left: 4px solid var(--err);}
+.t-ico {width:40px; height:40px; border-radius:50%; display:flex; align-items:center; justify-content:center; flex-shrink:0; background: #F3F4F6; color: var(--text);}
+.toast.ok .t-ico, .toast.wa .t-ico {background: var(--brand); color: #fff;}
+.toast.er .t-ico {background: var(--err); color: #fff;}
+.t-msg .t-title {font-weight:800; color:var(--text);}
+.t-msg .t-sub {color:var(--muted); font-weight:500; margin-top:4px; font-size:13px; line-height:1.5;}
+@keyframes tin{from{opacity:0;transform:translateX(30px) scale(0.95);}to{opacity:1;transform:translateX(0) scale(1);}}
+.spin{width:20px;height:20px;border:3px solid rgba(0,0,0,.1);border-top-color:var(--brand);border-radius:50%;animation:rot .7s linear infinite;display:inline-block;}
+@keyframes rot { to { transform: rotate(360deg); } }
+.spin.w { border-color: rgba(255,255,255,.3); border-top-color:#fff; }
+
+.api-badge { position:fixed; bottom:16px; left:16px; z-index:998; font-size:11px; font-weight:700; padding:6px 12px; border-radius:1rem; display:flex; align-items:center; gap:6px; background:#fff; box-shadow:0 4px 15px rgba(0,0,0,0.08); color:var(--muted); cursor:pointer;}
+.api-dot { width:8px; height:8px; border-radius:50%; background:#9CA3AF; }
+.api-dot.on { background: var(--ok); }
+.api-dot.off { background: var(--err); }
+
+@media(max-width:1024px){
+  .stats {grid-template-columns:1fr 1fr;}
+  .dash-grid {grid-template-columns:1fr;}
+  .wide-card {grid-column: span 1;}
+}
+@media(max-width:768px){
+  .dash { width: 100vw; height: 100vh; margin: 0; border-radius: 0; border: none; }
+  .login-wrap { flex-direction: column; width: 100vw; height: 100vh; border-radius: 0; border: none;}
+  .login-left { display: none; }
+  .login-right { padding: 20px; align-items: flex-start; background: var(--card); flex: 1; }
+  .login-box { padding: 24px; }
+  
+  .sidebar {display:none;}
+  .main {margin-left:0;}
+  .stats {grid-template-columns:1fr;}
+  .dash-grid {grid-template-columns:1fr;}
+  .main-scroll {padding: 0 20px 20px 20px;}
+  .topbar { padding: 0 20px; }
+  .diff-viewer { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<div id="toasts"></div>
+
+<!-- API connection indicator -->
+<div class="api-badge" id="api-badge" onclick="checkHealth(true)">
+  <span class="api-dot" id="api-dot"></span>
+  <span id="api-badge-text">Checking backend…</span>
+</div>
+
+<!-- Admin Login -->
+<div class="pg show" id="pg-login">
+  <div class="login-wrap">
+    <div class="login-left">
+      <img src="https://i.ibb.co/Hftj07VZ/ad.png" alt="Admin Graphic" style="width: 100%; height: 100%; object-fit: cover; object-position: center;" onerror="this.src='https://placehold.co/600x800/e2e8f0/1a1a2e?text=Illustration+Missing'"/>
+    </div>
+    <div class="login-right">
+      <div class="login-box">
+        <h2>Admin Portal</h2>
+        <p>Verify your identity to access operations.</p>
+        
+        <form id="form-login" onsubmit="doLogin(event)">
+          <div class="fg">
+            <label>Employee ID</label>
+            <div class="iw">
+              <svg class="ico" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <input type="text" id="l-eid" placeholder="e.g. ADMIN_01" required/>
+            </div>
+          </div>
+          <div class="fg">
+            <label>Password</label>
+            <div class="iw">
+              <svg class="ico" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <input type="password" id="l-pw" class="pwd-field" placeholder="••••••••" required/>
+              <button type="button" class="pwd-toggle" onclick="togglePwd('l-pw', this)" aria-label="Show password" tabindex="-1">
+                <svg class="eye-on" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+                <svg class="eye-off" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.66 19.66 0 0 1 4.22-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a19.86 19.86 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+              </button>
+            </div>
+          </div>
+
+          <div class="fg" style="margin-bottom: 28px;">
+            <label>Backend API URL</label>
+            <div class="iw">
+              <svg class="ico" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+              <input type="text" id="l-api" placeholder="http://localhost:5000/api"/>
+            </div>
+          </div>
+          
+          <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 32px;">
+            <label style="display:flex; align-items:center; gap:8px; font-size:13px; font-weight:600; cursor:pointer; color:var(--muted);">
+              <input type="checkbox" id="l-remember" checked style="width:16px; height:16px; cursor:pointer; accent-color: var(--brand);"> Remember me
+            </label>
+            <a href="#" onclick="toast('ok', 'Recovery', 'Recovery instructions sent to registered IT email.'); return false;" style="color:var(--brand); font-size:13px; font-weight:700; text-decoration:none;">Lost Key?</a>
+          </div>
+
+          <button type="submit" class="btn btn-p" id="btn-login" style="padding: 16px; font-size: 15px;">Authenticate Session</button>
+        </form>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Admin Dashboard -->
+<div class="pg" id="pg-dash">
+<div class="dash">
+  
+  <!-- Admin Sidebar -->
+  <nav class="sidebar">
+    <div class="sb-logo">
+      <div class="sbn">
+        <svg width="40" height="40" viewBox="0 0 100 100" fill="none" stroke="none" xmlns="http://www.w3.org/2000/svg" style="color:var(--brand); width:32px; height:32px;">
+          <defs>
+            <mask id="eyeMask-sm">
+              <rect width="100" height="100" fill="white" />
+              <circle cx="28" cy="42" r="6" fill="black" />
+            </mask>
+            <clipPath id="gearClip-sm">
+              <rect x="52" y="0" width="50" height="100" />
+            </clipPath>
+          </defs>
+          <path d="M 47 12 C 28 12, 18 28, 18 42 L 10 52 L 18 56 L 18 72 L 28 72 L 28 90 L 47 90 Z" fill="currentColor" mask="url(#eyeMask-sm)" />
+          <g clip-path="url(#gearClip-sm)">
+            <circle cx="47" cy="50" r="22" stroke="currentColor" stroke-width="12" />
+            <circle cx="47" cy="50" r="34" stroke="currentColor" stroke-width="12" stroke-dasharray="8.901 8.901" stroke-dashoffset="4.45" />
+          </g>
+        </svg>
+        OnlyTech
+      </div>
+      <div class="sbs">Command Center</div>
+    </div>
+    <div class="sb-nav">
+      <div class="sb-sect">Core Modules</div>
+      <div class="sb-item on" onclick="sec('overview',this)">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7"></rect><rect x="14" y="3" width="7" height="7"></rect><rect x="14" y="14" width="7" height="7"></rect><rect x="3" y="14" width="7" height="7"></rect></svg>
+        Overview
+      </div>
+      
+      <div class="sb-item" onclick="sec('knowledge',this)">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></svg>
+        Knowledge Base
+      </div>
+
+      <div class="sb-item" onclick="sec('approvals',this)">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15l2 2 4-4"/></svg>
+        Approvals
+        <span class="pill pill-g" id="sb-approvals-badge" style="margin-left:auto; padding:2px 8px; font-size:10px; display:none;">0</span>
+      </div>
+
+      <div class="sb-item" onclick="sec('incidents',this)">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        Active Incidents
+        <span class="pill pill-g" id="sb-incidents-badge" style="margin-left:auto; padding:2px 8px; font-size:10px; display:none;">0</span>
+      </div>
+
+      <div class="sb-sect">System Controls</div>
+      <div class="sb-item" onclick="sec('settings',this)">
+        <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Settings
+      </div>
+    </div>
+    
+    <div class="sb-foot">
+      <div class="sb-user">
+        <div class="sb-av">
+          <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <rect width="100" height="100" fill="#E5E7EB" />
+            <path d="M 12 100 C 12 60, 25 50, 50 50 C 75 50, 88 60, 88 100 Z" fill="#000" stroke="#fff" stroke-width="3"/>
+            <path d="M 32 100 L 32 62 M 68 100 L 68 62" stroke="#fff" stroke-width="2.5" fill="none"/>
+            <path d="M 35 65 Q 50 78 65 65 Z" fill="#000"/>
+            <path d="M 28 45 C 28 15, 72 15, 72 45 C 72 65, 60 70, 50 70 C 40 70, 28 65, 28 45 Z" fill="#fff" stroke="#000" stroke-width="2.5"/>
+            <path d="M 28 40 C 18 40, 18 55, 28 50 Z" fill="#fff" stroke="#000" stroke-width="2.5"/>
+            <path d="M 72 40 C 82 40, 82 55, 72 50 Z" fill="#fff" stroke="#000" stroke-width="2.5"/>
+            <path d="M 22 35 C 5 15, 30 5, 45 10 C 55 -8, 80 5, 78 20 C 95 20, 85 45, 72 45 C 70 30, 60 26, 50 26 C 40 26, 30 30, 28 45 C 15 45, 10 30, 22 35 Z" fill="#000"/>
+            <rect x="30" y="35" width="17" height="12" rx="3" fill="none" stroke="#000" stroke-width="2.5"/>
+            <rect x="53" y="35" width="17" height="12" rx="3" fill="none" stroke="#000" stroke-width="2.5"/>
+            <line x1="47" y1="41" x2="53" y2="41" stroke="#000" stroke-width="2.5"/>
+            <line x1="28" y1="41" x2="30" y2="41" stroke="#000" stroke-width="2.5"/>
+            <line x1="72" y1="41" x2="70" y2="41" stroke="#000" stroke-width="2.5"/>
+            <line x1="34" y1="42" x2="43" y2="42" stroke="#000" stroke-width="3"/>
+            <line x1="57" y1="42" x2="66" y2="42" stroke="#000" stroke-width="3"/>
+            <path d="M 46 48 C 46 53, 54 53, 54 48" fill="none" stroke="#000" stroke-width="2.5"/>
+            <path d="M 37 56 C 45 52, 55 52, 63 56 Q 60 59 50 58 Q 40 59 37 56 Z" fill="#000"/>
+            <path d="M 48 61 Q 50 65 52 61" fill="none" stroke="#000" stroke-width="2"/>
+          </svg>
+        </div>
+        <div style="flex: 1; min-width:0;">
+          <div class="sb-un" id="sb-user-name">Super Admin</div>
+          <div class="sb-ur" id="sb-user-role">SysOps</div>
+        </div>
+        <svg width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" style="margin-left:4px; cursor: pointer; color: var(--muted); flex-shrink:0;" onclick="doLogout()"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+      </div>
+    </div>
+  </nav>
+
+  <div class="main">
+    <div class="topbar">
+      <div class="tt" id="a-sec-title">Executive Overview</div>
+      <div class="tb-r">
+        <button class="btn btn-p" onclick="toast('ok','Report Generation','Exporting current view to PDF...')">
+          <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          Export Report
+        </button>
+        <button class="tb-btn" onclick="refreshAll(true)" title="Refresh data">
+          <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        </button>
+      </div>
+    </div>
+
+    <div class="main-scroll">
+      <!-- OVERVIEW SECTION -->
+      <div class="section on" id="s-overview">
+        <div class="stats">
+          <div class="sc dark">
+            <div class="sc-h">
+              <span class="sc-l">Active Documents</span>
+              <div class="sc-i"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></div>
+            </div>
+            <div class="sc-v" id="stat-active-documents">–</div>
+            <div><span class="sc-s">In repository</span></div>
+          </div>
+          <div class="sc dark">
+            <div class="sc-h">
+              <span class="sc-l">Pending Approvals</span>
+              <div class="sc-i"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="M9 15l2 2 4-4"/></svg></div>
+            </div>
+            <div class="sc-v" id="stat-pending-approvals">–</div>
+            <div><span class="sc-s">Awaiting review</span></div>
+          </div>
+          <div class="sc">
+            <div class="sc-h">
+              <span class="sc-l">Open Incidents</span>
+              <div class="sc-i"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div>
+            </div>
+            <div class="sc-v" id="stat-open-incidents">–</div>
+            <div><span class="sc-s" id="stat-open-incidents-badge">Action required</span></div>
+          </div>
+          <div class="sc">
+            <div class="sc-h">
+              <span class="sc-l">System Alerts</span>
+              <div class="sc-i"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><path d="M9 12l2 2 4-4"/></svg></div>
+            </div>
+            <div class="sc-v" id="stat-system-alerts">–</div>
+            <div><span class="sc-s" id="stat-system-alerts-badge">All clear</span></div>
+          </div>
+        </div>
+        
+        <div class="dash-grid">
+          <div class="card" style="margin-bottom:0; display: flex; flex-direction: column;">
+            <div class="ch">
+              <div>
+                <div class="ct">Incident Trend</div>
+                <div class="cs">Daily reported incidents (last 7 days)</div>
+              </div>
+            </div>
+            <div class="cb chart-v" id="incident-trend-chart" style="flex:1;">
+              <div class="empty-note">Loading…</div>
+            </div>
+          </div>
+          
+          <div class="card" style="margin-bottom:0; display: flex; flex-direction: column;">
+            <div class="ch">
+              <div>
+                <div class="ct">Top Queries</div>
+                <div class="cs">Most searched knowledge topics (PlantMind AI)</div>
+              </div>
+            </div>
+            <div class="cb chart-h" id="top-queries-chart" style="flex:1;">
+              <div class="empty-note">Loading…</div>
+            </div>
+          </div>
+          
+          <div class="card wide-card" style="margin-bottom:0; display:flex; flex-direction:column;">
+            <div class="ch">
+              <div><div class="ct">Recent Activity Feed</div><div class="cs">Latest system events from employees &amp; admins</div></div>
+              <button class="btn btn-out btn-sm" onclick="sec('approvals', document.querySelectorAll('.sb-item')[2])">View All</button>
+            </div>
+            <div class="cb" id="activity-feed-list" style="flex:1; padding: 32px;">
+              <div class="empty-note">Loading…</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- KNOWLEDGE CENTER SECTION -->
+      <div class="section" id="s-knowledge">
+        <div class="card" style="background:transparent; border:none; box-shadow:none;">
+          <div class="ch" style="flex-wrap: wrap; gap: 16px; border-radius:1.5rem; border:1px solid rgba(0,0,0,0.05); box-shadow: 0 4px 15px rgba(0,0,0,0.02); margin-bottom: 8px;">
+            <div>
+              <div class="ct">File Store Directory</div>
+              <div class="cs" id="knowledge-count">Browse and manage verified enterprise documents.</div>
+            </div>
+            <div style="display:flex; gap:12px; flex-wrap: wrap; align-items:center;">
+              <div class="iw" style="width:260px; position:relative;">
+                <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" style="color:var(--muted); left:16px; position:absolute; top:50%; transform:translateY(-50%); width:16px; height:16px;"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                <input type="text" id="knowledge-search" oninput="renderKnowledgeBase()" placeholder="Search documents..." style="width:100%; padding:12px 16px 12px 42px; border:1px solid rgba(0,0,0,0.1); border-radius:1rem; font-size:13px; font-weight:500; outline:none; font-family:'Inter',sans-serif;">
+              </div>
+              <button class="btn btn-p" onclick="document.getElementById('direct-upload-input').click()">
+                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                Upload File
+              </button>
+              <input type="file" id="direct-upload-input" style="display:none;" onchange="handleDirectUpload(event)" />
+            </div>
+          </div>
+          
+          <div class="doc-grid" id="knowledge-grid">
+            <div class="empty-note">Loading documents…</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- PENDING APPROVALS SECTION -->
+      <div class="section" id="s-approvals">
+        <div class="card">
+          <div class="ch">
+            <div>
+              <div class="ct"><span class="live-dot" id="approvals-live-dot"></span>Document Edit Approvals</div>
+              <div class="cs">Every employee upload is auto title-matched against the Knowledge Base. Only the 70–89% "needs review" band ever lands here — the rest is decided automatically.</div>
+            </div>
+            <span class="pill pill-g" id="approvals-refresh-label" style="font-size:11px;">Auto-refreshing</span>
+          </div>
+          <div class="threshold-note">
+            <span>Routing rule:</span>
+            <span class="tn-pill hi">≥ <span id="thr-approve-label">90</span>% title match → Auto-published</span>
+            <span class="tn-pill mid"><span id="thr-review-lo-label">70</span>–<span id="thr-review-hi-label">89</span>% → Admin review (here)</span>
+            <span class="tn-pill lo">&lt; <span id="thr-reject-label">70</span>% → Auto-rejected</span>
+          </div>
+          <div class="tbl">
+            <table>
+              <thead>
+                <tr>
+                  <th>Document</th>
+                  <th>Proposed Update</th>
+                  <th>Title Match</th>
+                  <th>Submitted By</th>
+                  <th>Date</th>
+                  <th style="text-align:right;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="approvals-tbody">
+                <tr><td colspan="6" style="text-align:center; padding:40px; color:var(--muted); font-weight:500;">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- INCIDENTS SECTION -->
+      <div class="section" id="s-incidents">
+        <div class="card">
+          <div class="ch">
+            <div>
+              <div class="ct">Active IT Incidents</div>
+              <div class="cs">Manage and resolve maintenance tickets reported by employees.</div>
+            </div>
+          </div>
+          <div class="tbl">
+            <table>
+              <thead>
+                <tr>
+                  <th>Ticket ID</th>
+                  <th>System / Service Name</th>
+                  <th>Severity</th>
+                  <th>Reported By</th>
+                  <th>Time</th>
+                  <th style="text-align:right;">Actions</th>
+                </tr>
+              </thead>
+              <tbody id="incidents-tbody">
+                <tr><td colspan="6" style="text-align:center; padding:40px; color:var(--muted); font-weight:500;">Loading…</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- SETTINGS SECTION -->
+      <div class="section" id="s-settings">
+        <div class="dash-grid">
+          
+          <!-- 1. Profile -->
+          <div class="card">
+            <div class="ch">
+              <div>
+                <div class="ct"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg> Admin Profile</div>
+              </div>
+            </div>
+            <div class="cb">
+              <div class="fg">
+                <label>Employee ID</label>
+                <input type="text" id="prof-eid" class="fg-nolic" readonly style="background:#F3F4F6; color:var(--muted); border:none;" title="Employee ID cannot be changed"/>
+              </div>
+              <div class="fg">
+                <label>Name</label>
+                <input type="text" id="prof-name" class="fg-nolic"/>
+              </div>
+              <div class="fg">
+                <label>Email</label>
+                <input type="email" id="prof-email" class="fg-nolic"/>
+              </div>
+              <div class="fg">
+                <label>Department</label>
+                <input type="text" id="prof-dept" class="fg-nolic"/>
+              </div>
+              <button class="btn btn-p" onclick="toast('ok', 'Profile Updated', 'Your profile details have been saved locally.')">Save Changes</button>
+            </div>
+          </div>
+
+          <!-- 2. Notifications -->
+          <div class="card">
+            <div class="ch">
+              <div>
+                <div class="ct"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg> Alerts & Notifications</div>
+              </div>
+            </div>
+            <div class="cb" style="padding-top:10px;">
+              <div class="setting-row">
+                <div class="sr-info">
+                  <h4>Document updates</h4>
+                  <p>Alert on new employee edit proposals.</p>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" checked onchange="handleToggle(this, 'Document alerts')">
+                  <span class="slider"></span>
+                </label>
+              </div>
+              <div class="setting-row">
+                <div class="sr-info">
+                  <h4>Incident alerts</h4>
+                  <p>Alert when a P1/P2 ticket is filed.</p>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" checked onchange="handleToggle(this, 'Incident alerts')">
+                  <span class="slider"></span>
+                </label>
+              </div>
+              <div class="setting-row" style="border-bottom: none;">
+                <div class="sr-info">
+                  <h4>System reports</h4>
+                  <p>Receive daily automated analytics.</p>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" checked onchange="handleToggle(this, 'System reports')">
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <!-- 3. Security -->
+          <div class="card">
+            <div class="ch">
+              <div>
+                <div class="ct"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg> Account Security</div>
+              </div>
+            </div>
+            <div class="cb">
+              <div style="display:flex; flex-direction:column; gap:16px; margin-bottom:32px;">
+                <button class="btn btn-out" style="justify-content:flex-start;" onclick="openModal('mod-change-pw')">
+                  <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4"/></svg>
+                  Change Password
+                </button>
+                <button class="btn btn-out" style="justify-content:flex-start;" onclick="openModal('mod-2fa')">
+                  <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+                  Setup OTP / 2FA
+                </button>
+              </div>
+              
+              <div style="border-top: 1px solid rgba(0,0,0,0.05); padding-top: 24px;">
+                <div style="font-size:12px; font-weight:800; color:var(--muted); text-transform:uppercase; margin-bottom:16px; letter-spacing:0.5px;">Active Sessions</div>
+                <div style="font-size:14px; font-weight:600; margin-bottom:6px; display:flex; justify-content:space-between;"><span>This device (Browser)</span><span class="pill pill-g">Current</span></div>
+                <div style="font-size:13px; font-weight:500; margin-bottom:24px; display:flex; justify-content:space-between; color:var(--muted);"><span id="sess-login-time">—</span></div>
+                
+                <button class="btn btn-err" style="width:100%; border-radius:1rem;" onclick="toast('ok', 'Sessions Terminated', 'All other active sessions have been logged out.')">Logout All Sessions</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- 4. System Controls -->
+          <div class="card">
+            <div class="ch">
+              <div>
+                <div class="ct"><svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg> System Rules</div>
+              </div>
+            </div>
+            <div class="cb" style="padding-top:10px;">
+              <div class="setting-row">
+                <div class="sr-info">
+                  <h4>Employee uploads</h4>
+                  <p>Allow users to submit new drafts.</p>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" checked onchange="handleToggle(this, 'Employee uploads')">
+                  <span class="slider"></span>
+                </label>
+              </div>
+              <div class="setting-row">
+                <div class="sr-info">
+                  <h4>Strict approval</h4>
+                  <p>Mandate admin review for edits.</p>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" checked onchange="handleToggle(this, 'Strict approval policy')">
+                  <span class="slider"></span>
+                </label>
+              </div>
+              <div class="setting-row" style="border-bottom:none;">
+                <div class="sr-info">
+                  <h4>Auto-versioning</h4>
+                  <p>Archive old documents silently.</p>
+                </div>
+                <label class="switch">
+                  <input type="checkbox" checked onchange="handleToggle(this, 'Auto-versioning')">
+                  <span class="slider"></span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+</div>
+
+<!-- MODALS -->
+
+<!-- View Document Content Modal -->
+<div class="modal-overlay" id="mod-view-file">
+  <div class="modal-box lg">
+    <div class="modal-header">
+      <div class="modal-title">
+        <span id="vf-icon" style="margin-right:8px;">📄</span>
+        <span id="vf-title">Document Title</span> 
+        <span class="pill pill-g" style="margin-left:12px; font-size:12px;" id="vf-version">v1.0</span>
+      </div>
+      <button class="modal-close" onclick="closeModal('mod-view-file')">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" style="background:#fff;">
+      <div style="font-size:13px; color:var(--muted); font-weight: 500; margin-bottom: 24px; border-bottom:1px solid var(--border); padding-bottom:16px; display:flex; justify-content:space-between; align-items:center;">
+        <div>
+          Last updated by: <strong id="vf-author" style="color:var(--text); font-weight:700;">Admin</strong> on <span id="vf-date">Date</span>
+        </div>
+        <span id="vf-status"></span>
+      </div>
+      <div id="vf-content" style="font-size:15px; line-height:1.7; color:var(--text); font-weight: 500; white-space:pre-wrap; font-family:'Inter', sans-serif;">
+        <!-- Content gets injected here -->
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-out" onclick="closeModal('mod-view-file')">Close</button>
+      <button class="btn btn-out" onclick="openDocDetails(currentViewDocId)">View History</button>
+      <button class="btn btn-p" id="vf-download-btn" onclick="downloadDocument(currentViewDocId)">Download File</button>
+    </div>
+  </div>
+</div>
+
+<!-- Document Details & Version History Modal -->
+<div class="modal-overlay" id="mod-doc">
+  <div class="modal-box md">
+    <div class="modal-header">
+      <div class="modal-title"><span id="mdoc-icon">📄</span> <span id="mdoc-title">Document Title</span></div>
+      <button class="modal-close" onclick="closeModal('mod-doc')">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div style="display:flex; justify-content:space-between; margin-bottom: 24px; padding-bottom:20px; border-bottom:1px solid rgba(0,0,0,0.05);">
+        <div>
+          <div style="font-size:12px; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Current Version</div>
+          <div style="font-size:24px; font-weight:800; color:var(--text); margin-top:4px;" id="mdoc-version">v2.0</div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:12px; color:var(--muted); font-weight:700; text-transform:uppercase; letter-spacing:0.5px;">Status</div>
+          <div style="margin-top:8px;" id="mdoc-status"><span class="pill pill-g">Active</span></div>
+        </div>
+      </div>
+
+      <h4 style="font-size:16px; font-weight:800; margin-bottom:8px;">Version History</h4>
+      <p style="font-size:13px; color:var(--muted); font-weight: 500; margin-bottom: 20px;">Previous versions are safely archived in Supabase.</p>
+      
+      <div class="timeline" id="mdoc-timeline">
+        <!-- Dynamically populated timeline -->
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-out" onclick="closeModal('mod-doc')">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- Review Approval Modal (Diff Viewer) -->
+<div class="modal-overlay" id="mod-review">
+  <div class="modal-box lg">
+    <div class="modal-header">
+      <div class="modal-title">Review Edit: <span id="rev-title" style="margin-left:8px;"></span></div>
+      <button class="modal-close" onclick="closeModal('mod-review')">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div id="rev-score-badge-wrap" style="margin-bottom:16px;"></div>
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; font-weight: 500;">
+        <div style="font-size:14px;">Proposed by: <strong id="rev-author" style="font-weight:700;"></strong></div>
+        <div style="font-size:13px; color:var(--muted);">Submitted: <span id="rev-date"></span></div>
+      </div>
+
+      <div id="rev-attachment" style="display:none; margin-bottom:20px; padding:14px 18px; background:#fff; border:1px solid rgba(0,0,0,0.08); border-radius:1rem; align-items:center; justify-content:space-between; gap:12px;">
+        <div style="display:flex; align-items:center; gap:10px; font-size:13px; font-weight:700;">
+          <span>📎</span> <span id="rev-attachment-name"></span>
+        </div>
+        <button class="btn btn-out btn-sm" onclick="downloadApprovalFile(currentReviewId)">Download File</button>
+      </div>
+
+      <div class="diff-viewer">
+        <div class="diff-pane">
+          <div class="diff-header">
+            <span>Current Version</span>
+            <span class="pill pill-g">v<span id="rev-old-v">1.0</span></span>
+          </div>
+          <div class="diff-content diff-old" id="rev-old-text"></div>
+        </div>
+        
+        <div class="diff-pane">
+          <div class="diff-header" style="background: var(--brand); color: #fff;">
+            <span style="color: rgba(255,255,255,0.7);">Proposed Version</span>
+            <span class="pill" style="background:#fff; color:var(--brand);">v<span id="rev-new-v">1.1</span></span>
+          </div>
+          <div class="diff-content diff-new" id="rev-new-text"></div>
+        </div>
+      </div>
+      
+      <div style="margin-top: 24px; font-size:13px; font-weight: 600; color:var(--muted); display: flex; align-items: center; gap: 8px;">
+        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+        Approving instantly publishes the new version and archives the old one.
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-out" onclick="closeModal('mod-review')" id="rev-cancel-btn">Cancel</button>
+      <button class="btn btn-err" style="border-radius:1rem;" onclick="handleDecision(false)" id="rev-reject-btn">Reject</button>
+      <button class="btn btn-p" onclick="handleDecision(true)" id="rev-approve-btn">Approve & Publish</button>
+    </div>
+  </div>
+</div>
+
+<!-- Incident Resolution Modal -->
+<div class="modal-overlay" id="mod-incident">
+  <div class="modal-box md">
+    <div class="modal-header">
+      <div class="modal-title">
+        <svg width="24" height="24" fill="none" stroke="var(--err)" stroke-width="2" viewBox="0 0 24 24" style="margin-right:8px;"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+        Ticket <span id="inc-id" style="margin-left:4px;"></span>
+      </div>
+      <button class="modal-close" onclick="closeModal('mod-incident')">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <div class="modal-body" style="background:#fff;">
+      <div style="display:flex; justify-content:space-between; margin-bottom: 24px; padding-bottom:20px; border-bottom:1px solid rgba(0,0,0,0.05);">
+        <div>
+          <div style="font-size:12px; color:var(--muted); font-weight:800; text-transform:uppercase; letter-spacing:0.5px;">System / Service</div>
+          <div style="font-size:16px; font-weight:700; color:var(--text); margin-top:6px;" id="inc-sys"></div>
+        </div>
+        <div style="text-align:right;">
+          <div style="font-size:12px; color:var(--muted); font-weight:800; text-transform:uppercase; letter-spacing:0.5px;">Severity</div>
+          <div style="margin-top:6px;" id="inc-sev"></div>
+        </div>
+      </div>
+
+      <div style="margin-bottom: 24px;">
+        <div style="font-size:12px; color:var(--muted); font-weight:800; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">Description</div>
+        <div id="inc-desc" style="font-size:14px; font-weight:500; line-height:1.6; color:var(--text); background:#F9FAFB; padding:16px; border-radius:1rem; border:1px solid rgba(0,0,0,0.05);"></div>
+      </div>
+
+      <div style="margin-bottom: 24px; display:flex; gap: 16px; align-items:center;">
+        <div style="flex:1;">
+          <div style="font-size:12px; color:var(--muted); font-weight:800; text-transform:uppercase; letter-spacing:0.5px; margin-bottom:8px;">Reported By</div>
+          <div class="user-cell"><div class="user-av" id="inc-av"></div><div class="user-info"><div class="un" id="inc-author"></div></div></div>
+        </div>
+        <div style="flex:1;">
+           <div id="inc-status-wrap" style="text-align:right;"></div>
+        </div>
+      </div>
+
+      <div id="inc-resolution-wrap">
+        <div class="fg" style="margin-bottom:0;">
+          <label>Resolution Notes</label>
+          <textarea id="inc-resolution" placeholder="Explain the fix..." required></textarea>
+        </div>
+      </div>
+      <div id="inc-resolved-note" style="display:none; font-size:13px; font-weight:600; color:var(--muted); background:#F9FAFB; padding:14px 16px; border-radius:1rem; border:1px solid rgba(0,0,0,0.05);"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-out" onclick="closeModal('mod-incident')">Cancel</button>
+      <button class="btn btn-p" id="inc-resolve-btn" onclick="resolveTicket()">Mark Resolved</button>
+    </div>
+  </div>
+</div>
+
+<!-- Change Password Modal -->
+<div class="modal-overlay" id="mod-change-pw">
+  <div class="modal-box sm">
+    <div class="modal-header">
+      <div class="modal-title">Update Password</div>
+      <button class="modal-close" onclick="closeModal('mod-change-pw')">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <form onsubmit="submitPasswordChange(event)">
+      <div class="modal-body" style="background:#fff;">
+        <div class="fg">
+          <label>Current Password</label>
+          <div class="iw">
+            <input type="password" id="pw-current" class="fg-nolic pwd-field" required placeholder="Enter current password"/>
+            <button type="button" class="pwd-toggle" onclick="togglePwd('pw-current', this)" aria-label="Show password" tabindex="-1">
+              <svg class="eye-on" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="eye-off" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.66 19.66 0 0 1 4.22-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a19.86 19.86 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="fg">
+          <label>New Password</label>
+          <div class="iw">
+            <input type="password" id="pw-new" class="fg-nolic pwd-field" required placeholder="Minimum 12 characters"/>
+            <button type="button" class="pwd-toggle" onclick="togglePwd('pw-new', this)" aria-label="Show password" tabindex="-1">
+              <svg class="eye-on" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="eye-off" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.66 19.66 0 0 1 4.22-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a19.86 19.86 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="fg" style="margin-bottom:0;">
+          <label>Confirm New Password</label>
+          <div class="iw">
+            <input type="password" id="pw-confirm" class="fg-nolic pwd-field" required placeholder="Repeat new password"/>
+            <button type="button" class="pwd-toggle" onclick="togglePwd('pw-confirm', this)" aria-label="Show password" tabindex="-1">
+              <svg class="eye-on" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+              <svg class="eye-off" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a19.66 19.66 0 0 1 4.22-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a19.86 19.86 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-out" onclick="closeModal('mod-change-pw')">Cancel</button>
+        <button type="submit" class="btn btn-p">Update</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- Enable 2FA Modal -->
+<div class="modal-overlay" id="mod-2fa">
+  <div class="modal-box sm">
+    <div class="modal-header">
+      <div class="modal-title">Enable 2FA</div>
+      <button class="modal-close" onclick="closeModal('mod-2fa')">
+        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+      </button>
+    </div>
+    <form onsubmit="verify2FA(event)">
+      <div class="modal-body" style="background:#fff; text-align:center;">
+        <p style="font-size:14px; font-weight:500; color:var(--muted); margin-bottom:24px;">Scan this code with your authenticator app.</p>
+        
+        <div style="width: 180px; height: 180px; margin: 0 auto 24px; border-radius: 1.5rem; overflow: hidden; border: 1px solid rgba(0,0,0,0.08); padding: 12px; background: #fff; box-shadow: 0 4px 15px rgba(0,0,0,0.03);">
+           <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=OnlyTechAdminAuth2FA" alt="QR Code" style="width: 100%; height: 100%; object-fit: contain;" onerror="this.src='https://placehold.co/150x150/ffffff/000000?text=QR+Code'"/>
+        </div>
+
+        <div class="fg" style="margin-bottom:0; text-align:left;">
+          <label>Verification Code</label>
+          <input type="text" class="fg-nolic" required placeholder="000000" maxlength="6" pattern="\d{6}" style="text-align:center; letter-spacing:8px; font-size:20px; font-weight:800;"/>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-out" onclick="closeModal('mod-2fa')">Cancel</button>
+        <button type="submit" class="btn btn-p">Verify</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+// ---- Config ----
+let API_BASE = localStorage.getItem('onlytech_api_base') || 'http://localhost:5000/api';
+let currentAdmin = null; 
+let currentViewDocId = null;
+let currentReviewId = null;
+let currentIncidentId = null;
+
+let knowledgeBase = [];      
+let pendingApprovals = [];   
+let allIncidents = [];       
+
+// AI / title-match routing thresholds — kept in sync with the backend's
+// AI_AUTO_APPROVE_MIN_SCORE / AI_AUTO_REJECT_MAX_SCORE via /api/health.
+let THRESHOLDS = { approve: 90, reject: 70 };
+
+// Auto-refresh timer handle for the Approvals tab (and overview badges)
+let AUTO_REFRESH_TIMER = null;
+const AUTO_REFRESH_MS = 15000; // 15s — admin dashboard updates automatically
+
+// ---- Password show/hide toggle ----
+function togglePwd(inputId, btnEl) {
+  const input = document.getElementById(inputId);
+  if (!input) return;
+  const show = input.type === 'password';
+  input.type = show ? 'text' : 'password';
+  btnEl.classList.toggle('is-visible', show);
+  btnEl.setAttribute('aria-label', show ? 'Hide password' : 'Show password');
+}
+
+// ---- consolidated API calling helper ----
+async function apiCall(endpoint, options = {}) {
+    const res = await fetch(API_BASE + endpoint, {
+        headers: options.body instanceof FormData ? {} : { 'Content-Type': 'application/json', ...(options.headers||{}) },
+        ...options
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throw new Error(data.error || `Request failed (${res.status})`);
+    }
+    return data;
+}
+
+async function apiDownload(path, fallbackName) {
+  const res = await fetch(`${API_BASE}${path}`);
+  if (!res.ok) {
+    let msg = `Download failed (${res.status})`;
+    try { const j = await res.json(); if (j.error) msg = j.error; } catch(e){}
+    throw new Error(msg);
+  }
+  const blob = await res.blob();
+  const disposition = res.headers.get('Content-Disposition') || '';
+  const match = disposition.match(/filename="?([^"]+)"?/);
+  const filename = match ? match[1] : (fallbackName || 'download');
+  const url = window.URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename;
+  document.body.appendChild(a); a.click(); a.remove();
+  window.URL.revokeObjectURL(url);
+}
+
+// ---- Health / connection badge ----
+async function checkHealth(manual) {
+  const dot = document.getElementById('api-dot');
+  const txt = document.getElementById('api-badge-text');
+  try {
+    const health = await apiCall('/health');
+    dot.className = 'api-dot on';
+    txt.innerText = `Connected${health.supabase_configured ? '' : ' (no Supabase!)'}`;
+
+    // Sync routing thresholds from backend so the Approvals tab always
+    // reflects the real AI_AUTO_APPROVE_MIN_SCORE / AI_AUTO_REJECT_MAX_SCORE
+    // env values instead of hardcoded numbers.
+    if (typeof health.ai_auto_approve_min_score === 'number') THRESHOLDS.approve = health.ai_auto_approve_min_score;
+    if (typeof health.ai_auto_reject_max_score === 'number') THRESHOLDS.reject = health.ai_auto_reject_max_score;
+    updateThresholdLabels();
+
+    if (manual) toast('ok', 'Backend Online', `Groq: ${health.groq_configured ? 'ready':'not configured'} · Supabase: ${health.supabase_configured ? 'ready':'not configured'}`);
+  } catch (e) {
+    dot.className = 'api-dot off';
+    txt.innerText = 'Backend unreachable';
+    if (manual) toast('er', 'Connection Failed', `Could not reach ${API_BASE}. ${e.message}`);
+  }
+}
+
+function updateThresholdLabels() {
+  const a = document.getElementById('thr-approve-label');
+  const rl = document.getElementById('thr-review-lo-label');
+  const rh = document.getElementById('thr-review-hi-label');
+  const r = document.getElementById('thr-reject-label');
+  if (a) a.innerText = THRESHOLDS.approve;
+  if (rl) rl.innerText = THRESHOLDS.reject;
+  if (rh) rh.innerText = Math.max(THRESHOLDS.reject, THRESHOLDS.approve - 1);
+  if (r) r.innerText = THRESHOLDS.reject;
+}
+
+// ---- Toast Notification System ----
+function toast(type, title, msg) {
+  const t = document.createElement('div');
+  t.className = `toast ${type}`;
+  let icon = '';
+  if(type==='ok') icon = '<svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"/></svg>';
+  if(type==='er') icon = '<svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+  if(type==='wa') icon = '<svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>';
+  
+  t.innerHTML = `<div class="t-ico">${icon}</div><div class="t-msg"><div class="t-title">${escapeHtml(title)}</div><div class="t-sub">${escapeHtml(msg)}</div></div>`;
+  document.getElementById('toasts').appendChild(t);
+  setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(30px)'; setTimeout(()=>t.remove(),300); }, 4500);
+}
+
+function escapeHtml(str) {
+  if (str === undefined || str === null) return '';
+  return String(str).replace(/[&<>"']/g, s => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[s]));
+}
+
+function timeAgo(iso) {
+  if (!iso) return '';
+  const d = new Date(iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z');
+  const diffMs = Date.now() - d.getTime();
+  const mins = Math.floor(diffMs / 60000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  if (days === 1) return 'Yesterday';
+  if (days < 7) return `${days}d ago`;
+  return d.toLocaleDateString();
+}
+
+function fmtDate(iso) {
+  if (!iso) return '—';
+  const d = new Date(iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z');
+  return d.toLocaleDateString(undefined, { year:'numeric', month:'short', day:'numeric' });
+}
+
+function pickIcon(name) {
+  const ext = (name || '').split('.').pop().toLowerCase();
+  const map = { pdf:'📕', doc:'📝', docx:'📝', txt:'📝', md:'📝', xls:'📊', xlsx:'📊', csv:'📊', png:'🖼️', jpg:'🖼️', jpeg:'🖼️', gif:'🖼️', webp:'🖼️', zip:'🗜️', json:'🧾', log:'🧾' };
+  return map[ext] || '📄';
+}
+
+// --- Navigation & Auth ---
+async function doLogin(e) {
+  e.preventDefault();
+  const btn = document.getElementById('btn-login');
+  const eid = document.getElementById('l-eid').value.trim();
+  const pw = document.getElementById('l-pw').value;
+  const apiInput = document.getElementById('l-api').value.trim();
+  const remember = document.getElementById('l-remember').checked;
+
+  if (apiInput) { API_BASE = apiInput.replace(/\/$/, ''); }
+  localStorage.setItem('onlytech_api_base', API_BASE);
+
+  btn.innerHTML = '<span class="spin w"></span> Authenticating...';
+  btn.disabled = true;
+
+  try {
+    const data = await apiCall('/auth/login', {
+      method: 'POST',
+      body: JSON.stringify({ employee_id: eid, password: pw }),
+    });
+    const user = data.user;
+    if (!user.role || (user.role.toLowerCase() !== 'admin' && user.role.toLowerCase() !== 'sysops')) {
+      throw new Error('This account does not have adequate Admin/SysOps privileges.');
+    }
+    currentAdmin = user;
+    if (remember) localStorage.setItem('onlytech_admin_session', JSON.stringify(user));
+
+    document.getElementById('pg-login').classList.remove('show');
+    document.getElementById('pg-dash').classList.add('show');
+    applyAdminToUI();
+    toast('ok', 'Authentication Success', `Welcome back, ${user.name}.`);
+    refreshAll(false);
+    startAutoRefresh();
+  } catch (err) {
+    toast('er', 'Login Failed', err.message);
+  } finally {
+    btn.innerHTML = 'Authenticate Session';
+    btn.disabled = false;
+  }
+}
+
+function applyAdminToUI() {
+  if (!currentAdmin) return;
+  document.getElementById('sb-user-name').innerText = currentAdmin.name || 'Admin';
+  document.getElementById('sb-user-role').innerText = currentAdmin.designation || currentAdmin.role || 'Admin';
+  const pe = document.getElementById('prof-eid'); if (pe) pe.value = currentAdmin.employee_id || '';
+  const pn = document.getElementById('prof-name'); if (pn) pn.value = currentAdmin.name || '';
+  const pem = document.getElementById('prof-email'); if (pem) pem.value = currentAdmin.email || '';
+  const pd = document.getElementById('prof-dept'); if (pd) pd.value = currentAdmin.department || '';
+  const st = document.getElementById('sess-login-time'); if (st) st.innerText = `Signed in ${new Date().toLocaleString()}`;
+}
+
+function doLogout() {
+  currentAdmin = null;
+  localStorage.removeItem('onlytech_admin_session');
+  document.getElementById('pg-dash').classList.remove('show');
+  document.getElementById('pg-login').classList.add('show');
+  document.getElementById('btn-login').innerHTML = 'Authenticate Session';
+  document.getElementById('btn-login').disabled = false;
+  stopAutoRefresh();
+}
+
+function sec(id, el) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('on'));
+  document.getElementById('s-'+id).classList.add('on');
+  document.querySelectorAll('.sb-item').forEach(i => i.classList.remove('on'));
+  el.classList.add('on');
+  
+  const titles = {
+    'overview': 'Executive Overview',
+    'knowledge': 'Knowledge Repository',
+    'approvals': 'Pending Approvals',
+    'incidents': 'Active Incidents',
+    'settings': 'System Settings'
+  };
+  document.getElementById('a-sec-title').innerText = titles[id] || 'Dashboard';
+
+  if (id === 'overview') loadOverview();
+  if (id === 'knowledge') loadKnowledgeBase();
+  if (id === 'approvals') loadApprovals();
+  if (id === 'incidents') loadIncidents();
+}
+
+// --- Modals & Settings JS ---
+function openModal(id) { document.getElementById(id).classList.add('show'); }
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+function handleToggle(el, settingName) {
+  const state = el.checked ? 'enabled' : 'disabled';
+  toast(el.checked ? 'ok' : 'wa', 'Setting Updated', `${settingName} has been ${state}.`);
+}
+
+function submitPasswordChange(e) {
+  e.preventDefault();
+  closeModal('mod-change-pw');
+  toast('wa', 'Local Update only', 'Password change endpoint template updated.');
+  e.target.reset();
+}
+
+function verify2FA(e) {
+  e.preventDefault();
+  closeModal('mod-2fa');
+  toast('wa', 'Local Update only', '2FA verified and logged inside app context.');
+  e.target.reset();
+}
+
+// ==========================================================================
+// 1) OVERVIEW — stats, incident trend, top queries, recent activity feed
+// ==========================================================================
+async function loadOverview() {
+  try {
+    const stats = await apiCall('/stats/overview');
+
+    document.getElementById('stat-active-documents').innerText = stats.active_documents ?? 0;
+    document.getElementById('stat-pending-approvals').innerText = stats.pending_approvals ?? 0;
+    document.getElementById('stat-open-incidents').innerText = stats.open_incidents ?? 0;
+    document.getElementById('stat-system-alerts').innerText = stats.system_alerts ?? 0;
+
+    const openBadge = document.getElementById('stat-open-incidents-badge');
+    if ((stats.open_incidents ?? 0) > 0) {
+      openBadge.innerText = 'Action required';
+      openBadge.style.color = 'var(--err)'; openBadge.style.background = 'rgba(239,68,68,0.1)';
+    } else {
+      openBadge.innerText = 'All clear';
+      openBadge.style.color = ''; openBadge.style.background = '';
+    }
+    const alertBadge = document.getElementById('stat-system-alerts-badge');
+    if ((stats.system_alerts ?? 0) > 0) {
+      alertBadge.innerText = 'Critical (P1) open';
+      alertBadge.style.color = 'var(--err)'; alertBadge.style.background = 'rgba(239,68,68,0.1)';
+    } else {
+      alertBadge.innerText = 'All clear';
+      alertBadge.style.color = ''; alertBadge.style.background = '';
+    }
+
+    renderIncidentTrend(stats.incident_trend || []);
+    renderTopQueries(stats.top_queries || []);
+
+    const apprBadge = document.getElementById('sb-approvals-badge');
+    if ((stats.pending_approvals ?? 0) > 0) { apprBadge.style.display='inline-flex'; apprBadge.innerText = stats.pending_approvals; }
+    else apprBadge.style.display = 'none';
+
+    const incBadge = document.getElementById('sb-incidents-badge');
+    if ((stats.open_incidents ?? 0) > 0) { incBadge.style.display='inline-flex'; incBadge.innerText = stats.open_incidents; }
+    else incBadge.style.display = 'none';
+
+  } catch (e) {
+    toast('er', 'Stats Failed', e.message);
+  }
+
+  try {
+    const activity = await apiCall('/activity?limit=8');
+    renderActivityFeed(activity || []);
+  } catch (e) {
+    document.getElementById('activity-feed-list').innerHTML = `<div class="empty-note">Could not load activity: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderIncidentTrend(trend) {
+  const box = document.getElementById('incident-trend-chart');
+  if (!trend.length) { box.innerHTML = '<div class="empty-note">No incident data yet.</div>'; return; }
+  const max = Math.max(1, ...trend.map(t => t.count || 0));
+  box.innerHTML = trend.map(t => {
+    const pct = Math.max(6, Math.round((t.count / max) * 100));
+    const light = t.count === 0 ? 'background:#9CA3AF;' : '';
+    return `<div class="c-col">
+      <div class="c-bar-wrap"><div class="c-bar" style="height:${pct}%; ${light}"><div class="c-val">${t.count}</div></div></div>
+      <span class="c-lbl">${escapeHtml(t.day)}</span>
+    </div>`;
+  }).join('');
+}
+
+function renderTopQueries(queries) {
+  const box = document.getElementById('top-queries-chart');
+  if (!queries.length) { box.innerHTML = '<div class="empty-note">No PlantMind AI queries logged yet.</div>'; return; }
+  const shades = ['', 'light', ''];
+  box.innerHTML = queries.map((q, i) => `
+    <div class="h-row">
+      <div class="h-lbl"><span>${escapeHtml(q.name)}</span><span>${q.pct}%</span></div>
+      <div class="h-track"><div class="h-fill ${shades[i] || 'light'}" style="width:${q.pct}%"></div></div>
+    </div>
+  `).join('');
+}
+
+function renderActivityFeed(items) {
+  const box = document.getElementById('activity-feed-list');
+  if (!items.length) { box.innerHTML = '<div class="empty-note">No activity recorded yet.</div>'; return; }
+  const actionLabels = {
+    uploaded_document: (a) => `<strong>${escapeHtml(a.actor)}</strong> uploaded <em>${escapeHtml(a.target||'a document')}</em>`,
+    proposed_edit:     (a) => `<strong>${escapeHtml(a.actor)}</strong> proposed an edit to <em>${escapeHtml(a.target||'a document')}</em>`,
+    approved_edit:     (a) => `<strong>${escapeHtml(a.actor)}</strong> approved an update to <em>${escapeHtml(a.target||'a document')}</em>`,
+    rejected_edit:     (a) => `<strong>${escapeHtml(a.actor)}</strong> rejected an edit to <em>${escapeHtml(a.target||'a document')}</em>`,
+    reported_incident: (a) => `<strong>${escapeHtml(a.actor)}</strong> reported incident <em>${escapeHtml(a.target||'')}</em>`,
+    resolved_incident: (a) => `<strong>${escapeHtml(a.actor)}</strong> resolved incident <em>${escapeHtml(a.target||'')}</em>`,
+    deleted_document:  (a) => `<strong>${escapeHtml(a.actor)}</strong> deleted <em>${escapeHtml(a.target||'a document')}</em>`,
+  };
+  box.innerHTML = items.map((a, idx) => {
+    const label = (actionLabels[a.action] || ((x)=>`<strong>${escapeHtml(x.actor)}</strong> ${escapeHtml(x.action)} ${escapeHtml(x.target||'')}`))(a);
+    const dotClass = idx === 0 ? 'outline' : (idx % 3 === 0 ? 'light' : '');
+    return `<div class="act-item">
+      <div class="act-dot ${dotClass}"></div>
+      <div class="act-txt">${label}${a.details ? `<div style="font-size:12px; color:var(--muted); font-weight:500; margin-top:2px;">${escapeHtml(a.details)}</div>`:''}<div class="act-time">${timeAgo(a.created_at)}</div></div>
+    </div>`;
+  }).join('');
+}
+
+// ==========================================================================
+// 2) KNOWLEDGE BASE — real files stored/served via Supabase Storage
+// ==========================================================================
+async function loadKnowledgeBase() {
+  const grid = document.getElementById('knowledge-grid');
+  grid.innerHTML = '<div class="empty-note">Loading documents…</div>';
+  try {
+    knowledgeBase = await apiCall('/documents');
+    document.getElementById('knowledge-count').innerText = `Browse and manage ${knowledgeBase.length} verified enterprise document${knowledgeBase.length===1?'':'s'}.`;
+    renderKnowledgeBase();
+  } catch (e) {
+    grid.innerHTML = `<div class="empty-note">Failed to load documents: ${escapeHtml(e.message)}</div>`;
+  }
+}
+
+function renderKnowledgeBase() {
+  const grid = document.getElementById('knowledge-grid');
+  const q = (document.getElementById('knowledge-search').value || '').toLowerCase().trim();
+  const filtered = q ? knowledgeBase.filter(d => (d.name||'').toLowerCase().includes(q) || (d.summary||'').toLowerCase().includes(q)) : knowledgeBase;
+
+  if (!filtered.length) {
+    grid.innerHTML = '<div class="empty-note">No documents found. Upload one to get started.</div>';
+    return;
+  }
+
+  grid.innerHTML = filtered.map(doc => {
+    const statusClass = doc.status === 'Active' ? 'pill-active' : (doc.status === 'Draft' ? 'pill-draft' : 'pill-g');
+    const author = (doc.uploaded_by || 'Unknown').split(' ')[0];
+    return `
+      <div class="doc-card" onclick="viewFile('${doc.id}')" title="Click to open document">
+        <div class="dc-top">
+          <div class="dc-icon">${doc.icon || pickIcon(doc.file_name || doc.name)}</div>
+          <div class="dc-title">${escapeHtml(doc.name)}</div>
+          <div class="dc-actions">
+            <button class="dc-hist-btn" onclick="event.stopPropagation(); openDocDetails('${doc.id}')" title="Version History">
+              <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+            </button>
+            <button class="dc-del-btn" onclick="event.stopPropagation(); deleteDocument('${doc.id}')" title="Delete Document">
+              <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+          </div>
+        </div>
+        <div class="dc-meta">
+          <span>${fmtDate(doc.updated_at || doc.created_at)} • ${escapeHtml(author)}</span>
+          <div style="display:flex; gap:6px; align-items:center;">
+            <span class="pill ${statusClass}">${escapeHtml(doc.status || 'Active')}</span>
+            <span class="pill pill-g">${escapeHtml(doc.version || 'v1.0')}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+async function viewFile(docId) {
+  try {
+    const doc = await apiCall(`/documents/${docId}`);
+    currentViewDocId = docId;
+
+    document.getElementById('vf-icon').innerText = doc.icon || pickIcon(doc.file_name || doc.name);
+    document.getElementById('vf-title').innerText = doc.name;
+    document.getElementById('vf-version').innerText = doc.version || 'v1.0';
+    document.getElementById('vf-author').innerText = doc.uploaded_by || 'Unknown';
+    document.getElementById('vf-date').innerText = fmtDate(doc.updated_at || doc.created_at);
+
+    const statusClass = doc.status === 'Active' ? 'pill-active' : (doc.status === 'Draft' ? 'pill-draft' : 'pill-dark');
+    document.getElementById('vf-status').innerHTML = `<span class="pill ${statusClass}">${escapeHtml(doc.status || 'Active')}</span>`;
+
+    const bodyText = doc.content && doc.content.trim() ? doc.content : (doc.summary || '(No preview text available for this file type. Use Download to view the original file.)');
+    document.getElementById('vf-content').innerHTML = escapeHtml(bodyText).replace(/\n/g, '<br/>');
+
+    const dlBtn = document.getElementById('vf-download-btn');
+    dlBtn.style.display = doc.file_path ? 'inline-flex' : 'none';
+
+    closeModal('mod-doc');
+    openModal('mod-view-file');
+  } catch (e) {
+    toast('er', 'Could not open document', e.message);
+  }
+}
+
+async function downloadDocument(docId) {
+  if (!docId) return;
+  try {
+    toast('ok', 'Download started', 'Fetching file from Supabase Storage…');
+    await apiDownload(`/documents/${docId}/download`);
+  } catch (e) {
+    toast('er', 'Download Failed', e.message);
+  }
+}
+
+async function deleteDocument(docId) {
+  const doc = knowledgeBase.find(d => d.id === docId);
+  const name = doc ? doc.name : 'this document';
+  if (!confirm(`Delete "${name}"? This permanently removes the file and its version history. This cannot be undone.`)) return;
+
+  try {
+    await apiCall(`/documents/${docId}?deleted_by=${encodeURIComponent(currentAdmin ? currentAdmin.name : 'Super Admin')}`, { method: 'DELETE' });
+    toast('ok', 'Document Deleted', `${name} has been removed from the Knowledge Base.`);
+    closeModal('mod-view-file');
+    await loadKnowledgeBase();
+    loadOverview();
+  } catch (e) {
+    toast('er', 'Delete Failed', e.message);
+  }
+}
+
+async function openDocDetails(docId) {
+  try {
+    const doc = await apiCall(`/documents/${docId}`);
+    document.getElementById('mdoc-icon').innerText = doc.icon || pickIcon(doc.file_name || doc.name);
+    document.getElementById('mdoc-title').innerText = doc.name;
+    document.getElementById('mdoc-version').innerText = doc.version || 'v1.0';
+
+    const statusClass = doc.status === 'Active' ? 'pill-active' : (doc.status === 'Draft' ? 'pill-draft' : 'pill-dark');
+    document.getElementById('mdoc-status').innerHTML = `<span class="pill ${statusClass}">${escapeHtml(doc.status || 'Active')}</span>`;
+
+    const tl = document.getElementById('mdoc-timeline');
+    const history = doc.history || [];
+    if (!history.length) {
+      tl.innerHTML = '<div class="empty-note">No version history recorded yet.</div>';
+    } else {
+      tl.innerHTML = history.map((hist, index) => {
+        const isActive = index === 0 ? 'active' : '';
+        const tag = index === 0 ? '<span class="pill pill-b" style="font-size:10px; padding:2px 8px;">Current</span>' : '<span class="pill pill-g" style="font-size:10px; padding:2px 8px;">Archived</span>';
+        return `
+          <div class="timeline-item ${isActive}">
+            <div class="timeline-dot"></div>
+            <div class="timeline-content">
+              <div class="tl-head">
+                <div class="tl-title">Version ${escapeHtml(hist.version)} ${tag}</div>
+                <div class="tl-date">${fmtDate(hist.created_at)}</div>
+              </div>
+              <div style="font-size: 13px; font-weight:600; color:var(--muted); margin-bottom:6px;">Modified by: <span style="color:var(--text);">${escapeHtml(hist.updated_by)}</span></div>
+              <div style="font-size:14px; font-weight:500; color:var(--text);">${escapeHtml(hist.changes || '')}</div>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+    openModal('mod-doc');
+  } catch (e) {
+    toast('er', 'Could not load history', e.message);
+  }
+}
+
+async function handleDirectUpload(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const name = file.name.replace(/\.[^/.]+$/, "");
+  const fd = new FormData();
+  fd.append('file', file);
+  fd.append('name', name);
+  fd.append('uploaded_by', currentAdmin ? currentAdmin.name : 'Super Admin');
+
+  toast('ok', 'Uploading…', `Sending ${file.name} to Supabase Storage.`);
+  try {
+    await apiCall('/documents/upload', { method: 'POST', body: fd });
+    toast('ok', 'Upload Successful', `${file.name} is now stored and published.`);
+    await loadKnowledgeBase();
+    loadOverview();
+  } catch (err) {
+    toast('er', 'Upload Failed', err.message);
+  } finally {
+    e.target.value = '';
+  }
+}
+
+// ==========================================================================
+// 3) APPROVALS — real employee submissions from document_approvals table.
+//    Automated routing lives in the backend (title-match against the
+//    Knowledge Base): >= approve threshold auto-publishes, < reject
+//    threshold auto-rejects, and only the band in between (the mid-range
+//    "needs a human look" zone) is ever inserted here with status Pending.
+//    This tab polls automatically every AUTO_REFRESH_MS so newly-submitted
+//    employee uploads show up here without a manual refresh.
+// ==========================================================================
+async function loadApprovals() {
+  const tbody = document.getElementById('approvals-tbody');
+  const isFirstLoad = !pendingApprovals.length;
+  if (isFirstLoad) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:40px; color:var(--muted); font-weight:500;">Loading…</td></tr>';
+  }
+  try {
+    const fresh = await apiCall('/approvals?status=Pending');
+    const isNew = fresh.length > pendingApprovals.length && !isFirstLoad;
+    pendingApprovals = fresh;
+    renderApprovals();
+    if (isNew) {
+      toast('wa', 'New Submission', 'A new document upload needs your review in Approvals.');
+    }
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:40px; color:var(--err); font-weight:600;">Failed to load approvals: ${escapeHtml(e.message)}</td></tr>`;
+  }
+}
+
+function aiScorePill(app) {
+  if (app.ai_score === undefined || app.ai_score === null) return '<span class="pill pill-g">—</span>';
+  const score = app.ai_score;
+  let cls = 'pill-g';
+  if (score >= THRESHOLDS.approve) cls = 'pill-active';
+  else if (score >= THRESHOLDS.reject) cls = 'pill-draft';
+  else cls = 'pill-reject';
+  return `<span class="pill ${cls}" title="${escapeHtml(app.ai_reasoning || '')}">${score}% match</span>`;
+}
+
+function renderApprovals() {
+  const tbody = document.getElementById('approvals-tbody');
+  if (!pendingApprovals.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 40px; color:var(--muted); font-weight:500;">No pending edits to review. Auto-approved / auto-rejected uploads are logged in Recent Activity.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = pendingApprovals.map(app => `
+    <tr>
+      <td><strong style="font-weight:700; color:var(--text);">${app.file_name ? '📎' : '📄'} ${escapeHtml(app.doc_name)}</strong></td>
+      <td><span style="color:var(--muted); font-weight:600;">${escapeHtml(app.old_version)}</span> → <strong style="font-weight:800; color:var(--brand);">${escapeHtml(app.proposed_version)}</strong></td>
+      <td>${aiScorePill(app)}</td>
+      <td><div class="user-cell"><div class="user-av">${escapeHtml((app.submitted_by||'?').charAt(0))}</div><div class="user-info"><div class="un">${escapeHtml(app.submitted_by)}</div></div></div></td>
+      <td style="color:var(--muted); font-weight:500;">${timeAgo(app.created_at)}</td>
+      <td style="text-align:right;">
+        <button class="btn btn-p btn-sm" onclick="openReviewModal('${app.id}')">Review Edit</button>
+      </td>
+    </tr>
+  `).join('');
+}
+
+function openReviewModal(appId) {
+  const app = pendingApprovals.find(a => a.id === appId);
+  if (!app) return;
+  currentReviewId = appId;
+
+  document.getElementById('rev-title').innerText = app.doc_name;
+  document.getElementById('rev-author').innerText = app.submitted_by;
+  document.getElementById('rev-date').innerText = fmtDate(app.created_at);
+  document.getElementById('rev-old-v').innerText = app.old_version;
+  document.getElementById('rev-new-v').innerText = app.proposed_version;
+
+  const scoreWrap = document.getElementById('rev-score-badge-wrap');
+  if (app.ai_score !== undefined && app.ai_score !== null) {
+    let cls = 'mid';
+    if (app.ai_score >= THRESHOLDS.approve) cls = 'high';
+    else if (app.ai_score < THRESHOLDS.reject) cls = 'low';
+    scoreWrap.innerHTML = `<div class="ai-score-badge ${cls}">
+      <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></svg>
+      Title match: ${app.ai_score}% ${app.ai_reasoning ? '— ' + escapeHtml(app.ai_reasoning) : ''}
+    </div>`;
+  } else {
+    scoreWrap.innerHTML = '';
+  }
+
+  document.getElementById('rev-old-text').innerHTML = escapeHtml(app.old_content || '(New document — no previous version)').replace(/\n/g, '<br/>');
+  document.getElementById('rev-new-text').innerHTML = escapeHtml(app.new_content || '(No text content — see attached file)').replace(/\n/g, '<br/>');
+
+  const attach = document.getElementById('rev-attachment');
+  if (app.file_name) {
+    attach.style.display = 'flex';
+    document.getElementById('rev-attachment-name').innerText = `${app.file_name} (${app.file_size ? Math.round(app.file_size/1024)+' KB' : ''})`;
+  } else {
+    attach.style.display = 'none';
+  }
+
+  openModal('mod-review');
+}
+
+async function downloadApprovalFile(appId) {
+  if (!appId) return;
+  try {
+    await apiDownload(`/approvals/${appId}/file`);
+  } catch (e) {
+    toast('er', 'Download Failed', e.message);
+  }
+}
+
+async function handleDecision(isApproved) {
+  if (!currentReviewId) return;
+  const app = pendingApprovals.find(a => a.id === currentReviewId);
+  if (!app) return;
+
+  const approveBtn = document.getElementById('rev-approve-btn');
+  const rejectBtn = document.getElementById('rev-reject-btn');
+  approveBtn.disabled = true; rejectBtn.disabled = true;
+
+  try {
+    await apiCall(`/approvals/${currentReviewId}/decide`, {
+      method: 'POST',
+      body: JSON.stringify({ approve: isApproved, decided_by: currentAdmin ? currentAdmin.name : 'Super Admin' }),
+    });
+
+    if (isApproved) {
+      toast('ok', 'Document Approved', `${app.doc_name} updated to ${app.proposed_version} and published to the Knowledge Base.`);
+    } else {
+      toast('wa', 'Edit Rejected', `Proposed edit for ${app.doc_name} was rejected.`);
+    }
+
+    closeModal('mod-review');
+    await Promise.all([loadApprovals(), loadKnowledgeBase()]);
+    loadOverview();
+  } catch (e) {
+    toast('er', 'Decision Failed', e.message);
+  } finally {
+    approveBtn.disabled = false; rejectBtn.disabled = false;
+  }
+}
+
+// ==========================================================================
+// 4) ACTIVE INCIDENTS — real maintenance tickets reported by employees
+// ==========================================================================
+async function loadIncidents() {
+  const tbody = document.getElementById('incidents-tbody');
+  tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding:40px; color:var(--muted); font-weight:500;">Loading…</td></tr>';
+  try {
+    allIncidents = await apiCall('/maintenance');
+    renderIncidents();
+  } catch (e) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align:center; padding:40px; color:var(--err); font-weight:600;">Failed to load incidents: ${escapeHtml(e.message)}</td></tr>`;
+  }
+}
+
+function renderIncidents() {
+  const tbody = document.getElementById('incidents-tbody');
+  const active = allIncidents.filter(t => t.status !== 'Resolved');
+
+  if (!active.length) {
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center; padding: 40px; color:var(--muted); font-weight:500;">No active incidents. All clear 🎉</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = active.map(inc => {
+    let sevPill = '<span class="pill pill-g">' + escapeHtml(inc.severity||'') + '</span>';
+    if ((inc.severity||'').includes('P1')) sevPill = `<span class="pill" style="background:rgba(239,68,68,0.1); color:var(--err);">Critical (${escapeHtml(inc.severity)})</span>`;
+    else if ((inc.severity||'').includes('P2')) sevPill = `<span class="pill" style="background:rgba(245,158,11,0.1); color:var(--warn);">High (${escapeHtml(inc.severity)})</span>`;
+    else if ((inc.severity||'').includes('P3')) sevPill = `<span class="pill pill-g">Low (${escapeHtml(inc.severity)})</span>`;
+
+    return `
+      <tr>
+        <td><strong style="font-family:monospace; color:var(--muted);">${escapeHtml(inc.ticket_id)}</strong></td>
+        <td>
+          <div style="font-weight:700; color:var(--text);">${escapeHtml(inc.system_name)}</div>
+          <div style="font-size:12px; font-weight:500; color:var(--muted); margin-top:4px;">${escapeHtml(inc.issue_type)}</div>
+        </td>
+        <td>${sevPill}</td>
+        <td><div class="user-cell"><div class="user-av">${escapeHtml((inc.reported_by||'?').charAt(0))}</div><div class="user-info"><div class="un">${escapeHtml(inc.reported_by)}</div></div></div></td>
+        <td style="color:var(--muted); font-weight:500;">${timeAgo(inc.created_at)}</td>
+        <td style="text-align:right;">
+          <button class="btn btn-out btn-sm" style="border-radius:1rem;" onclick="openIncidentModal('${inc.id}')">Review</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function openIncidentModal(incId) {
+  const inc = allIncidents.find(i => i.id === incId);
+  if (!inc) return;
+
+  currentIncidentId = incId;
+  document.getElementById('inc-id').innerText = inc.ticket_id;
+  document.getElementById('inc-sys').innerText = inc.system_name;
+
+  let sevPill = '';
+  if ((inc.severity||'').includes('P1')) sevPill = `<span class="pill" style="background:rgba(239,68,68,0.1); color:var(--err);">Critical (${escapeHtml(inc.severity)})</span>`;
+  else if ((inc.severity||'').includes('P2')) sevPill = `<span class="pill" style="background:rgba(245,158,11,0.1); color:var(--warn);">High (${escapeHtml(inc.severity)})</span>`;
+  else sevPill = `<span class="pill pill-g">${escapeHtml(inc.severity||'')}</span>`;
+
+  document.getElementById('inc-sev').innerHTML = sevPill;
+  document.getElementById('inc-desc').innerText = inc.description;
+  document.getElementById('inc-av').innerText = (inc.reported_by||'?').charAt(0);
+  document.getElementById('inc-author').innerText = inc.reported_by;
+
+  const isResolved = inc.status === 'Resolved';
+  document.getElementById('inc-resolution-wrap').style.display = isResolved ? 'none' : 'block';
+  document.getElementById('inc-resolve-btn').style.display = isResolved ? 'none' : 'inline-flex';
+  const resNote = document.getElementById('inc-resolved-note');
+  if (isResolved) {
+    resNote.style.display = 'block';
+    resNote.innerHTML = `<strong>Resolved</strong> by ${escapeHtml(inc.resolved_by||'Admin')}: ${escapeHtml(inc.resolution_notes||'')}`;
+  } else {
+    resNote.style.display = 'none';
+    document.getElementById('inc-resolution').value = '';
+  }
+
+  document.getElementById('inc-status-wrap').innerHTML = `<span class="pill ${isResolved ? 'pill-active' : 'pill-draft'}">${escapeHtml(inc.status)}</span>`;
+
+  openModal('mod-incident');
+}
+
+async function resolveTicket() {
+  if (!currentIncidentId) return;
+  const resolutionText = document.getElementById('inc-resolution').value.trim();
+
+  if (!resolutionText) {
+    toast('wa', 'Input Required', 'Provide resolution notes to close this ticket.');
+    return;
+  }
+
+  const btn = document.getElementById('inc-resolve-btn');
+  btn.disabled = true;
+  try {
+    await apiCall(`/maintenance/${currentIncidentId}/resolve`, {
+      method: 'POST',
+      body: JSON.stringify({ resolution_notes: resolutionText, resolved_by: currentAdmin ? currentAdmin.name : 'Admin' }),
+    });
+    toast('ok', 'Ticket Resolved', 'Incident marked as resolved.');
+    closeModal('mod-incident');
+    await loadIncidents();
+    loadOverview();
+  } catch (e) {
+    toast('er', 'Failed to Resolve', e.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+// ---- Bulk refresh ----
+function refreshAll(manual) {
+  checkHealth(manual);
+  loadOverview();
+  loadKnowledgeBase();
+  loadApprovals();
+  loadIncidents();
+  if (manual) toast('ok', 'Refreshed', 'Latest data pulled from the backend.');
+}
+
+// ---- Auto-refresh: keeps Approvals / Overview live without manual clicks ----
+function startAutoRefresh() {
+  stopAutoRefresh();
+  AUTO_REFRESH_TIMER = setInterval(() => {
+    if (!currentAdmin) return;
+    checkHealth(false);
+    loadOverview();
+    // Only poll Approvals/Incidents tables quietly; Knowledge Base is
+    // reloaded on-demand (upload/approve/reject) to avoid needless traffic.
+    loadApprovals();
+    loadIncidents();
+  }, AUTO_REFRESH_MS);
+}
+function stopAutoRefresh() {
+  if (AUTO_REFRESH_TIMER) { clearInterval(AUTO_REFRESH_TIMER); AUTO_REFRESH_TIMER = null; }
+}
+
+// ---- Init ----
+window.onload = () => {
+  const apiInput = document.getElementById('l-api');
+  if (apiInput) apiInput.value = API_BASE;
+  checkHealth(false);
+  updateThresholdLabels();
+
+  const saved = localStorage.getItem('onlytech_admin_session');
+  if (saved) {
+    try {
+      currentAdmin = JSON.parse(saved);
+      document.getElementById('pg-login').classList.remove('show');
+      document.getElementById('pg-dash').classList.add('show');
+      applyAdminToUI();
+      refreshAll(false);
+      startAutoRefresh();
+    } catch (e) { /* ignore corrupted session */ }
+  }
+};
+</script>
+</body>
+</html>
