@@ -2,31 +2,76 @@
 OnlyTech Portal - Backend API
 Handles: Auth (signup/login), PlantMind AI (Groq), Documents (with real file storage
 in Supabase Storage + real PDF/DOCX text extraction), AI-assisted before/after
-document updates, Document Approval workflow (now with automatic TITLE-MATCH
-routing), Maintenance tickets, Activity log, and dashboard stats.
+document updates, Document Approval workflow WITH AUTOMATIC TITLE+CONTENT MATCH
+ROUTING, Maintenance tickets, Activity log, and dashboard stats.
 
-APPROVAL ROUTING
-------------------------------------------------
+APPROVAL ROUTING (fully automatic, per the Decision Engine)
+------------------------------------------------------------------
 Every employee document upload (propose_upload) and every proposed document
-replacement (propose_document_update) is ALWAYS sent to the admin Approvals
-tab for a human decision. PlantMind AI's title-match score and content-quality
-score are still computed and attached to the request purely as advisory
-context for the admin (shown in the Approvals UI) - they never auto-approve
-or auto-reject on their own. Nothing is ever published to the Knowledge Base,
-and no file is ever deleted, without an explicit admin decision via
-/api/approvals/<id>/decide.
+replacement (propose_document_update) is:
 
-Every submission is written to activity_log so it's fully auditable
-from the Overview -> Recent Activity feed, and into document_approvals with
-status "Pending" plus the ai_score/ai_reasoning columns if your schema has
-them.
+  1. Text-extracted (PDF / DOCX / plain text)
+  2. Matched against the existing Knowledge Base by TITLE similarity
+  3. COMPARED against the matched document's actual content (content similarity)
+  4. Combined into a single 0-100 match score
+  5. Routed by the Decision Engine:
+
+        score >= AI_AUTO_APPROVE_MIN_SCORE (default 90)  -> AUTO-PUBLISHED
+        AI_AUTO_REJECT_MAX_SCORE <= score < APPROVE (70-89) -> ADMIN REVIEW QUEUE
+        score <  AI_AUTO_REJECT_MAX_SCORE (default 70)    -> AUTO-REJECTED
+
+  6. The outcome (Approved / Pending / Rejected) is always written to
+     document_approvals for a full audit trail, and to activity_log so it
+     shows up instantly in the admin Overview -> Recent Activity feed and
+     the Approvals tab (only Pending rows are ever listed there).
+
+Only the middle band ever requires a human click in
+/api/approvals/<id>/decide, OR gets picked up by the batch "Automate" button
+in /api/approvals/automate-batch, which re-runs the SAME Groq-powered
+comparison (KB document vs proposed file) on every currently-Pending row.
+
+GROQ-POWERED COMPARISON (used by both the single-upload flow AND the
+"Automate" batch button)
+------------------------------------------------------------------
+Groq does not host an embeddings endpoint, so instead of a local
+sentence-transformers model we ask the Groq-hosted LLM directly: "here is
+the CURRENT published document, here is the PROPOSED replacement/upload -
+how consistent/same-topic are they, on a scale of 0-100?" That score is
+combined with a cheap, dependency-free title-match score (difflib) to
+produce the final routing score. This means the automation genuinely uses
+your GROQ_API_KEY end-to-end and needs no extra ML dependencies.
+
+PLANTMIND AI KNOWLEDGE SCOPE (updated)
+------------------------------------------------------------------
+PlantMind AI (/api/ai/ask) is grounded on REAL data pulled live from
+Supabase at question time - not just published Knowledge Base documents.
+On every question it now searches:
+
+  - documents            -> Active AND Draft/Updated documents (full text)
+  - document_history     -> full version-by-version audit trail (who changed
+                             what, when, and what the content looked like at
+                             that version)
+  - document_approvals   -> the Approvals queue itself: Pending / Approved /
+                             Rejected requests, who submitted them, the AI
+                             match score + reasoning, who decided them
+  - maintenance_tickets  -> all incidents (open + resolved), resolution notes
+  - activity_log         -> the full audit trail of who did what and when
+                             (uploads, approvals, rejections, resolutions,
+                             deletions, batch automation runs)
+  - users                -> employee directory (name/department/role/email)
+
+Every context block handed to Groq is built directly from a live Supabase
+SELECT, so PlantMind AI can never invent a document, employee, or incident
+that isn't actually in the database - it can only summarize/explain what's
+really stored. Each answer is returned together with a `sources` array so
+the admin UI can show exactly which records were used.
 
 Run:
     pip install -r requirements.txt
     cp .env.example .env      # fill in your keys
     python app.py
 
-requirements.txt should include:
+requirements.txt:
     flask
     flask-cors
     python-dotenv
@@ -73,20 +118,26 @@ except ImportError:
 # --------------------------------------------------------------------------
 load_dotenv()
 
-GROQ_API_KEY       = os.getenv("GROQ_API_KEY")
-SUPABASE_URL       = os.getenv("SUPABASE_URL")
-SUPABASE_KEY       = os.getenv("SUPABASE_KEY")   # service_role key for server-side writes
-GROQ_MODEL_NAME     = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
-STORAGE_BUCKET      = os.getenv("SUPABASE_STORAGE_BUCKET", "documents")
+GROQ_API_KEY        = os.getenv("GROQ_API_KEY")
+SUPABASE_URL         = os.getenv("SUPABASE_URL")
+SUPABASE_KEY         = os.getenv("SUPABASE_KEY")   # service_role key for server-side writes
+GROQ_MODEL_NAME      = os.getenv("GROQ_MODEL", "llama-3.3-70b-versatile")
+STORAGE_BUCKET       = os.getenv("SUPABASE_STORAGE_BUCKET", "documents")
 
 # Max characters of extracted document text we'll keep / send to Groq per document.
 MAX_EXTRACTED_CHARS = 15000
+# Max characters of each side (current vs proposed) sent to Groq for the
+# comparison call specifically - kept smaller so the batch automation call
+# stays fast and cheap even on large documents.
+MAX_COMPARE_CHARS = 4000
 
-# PlantMind AI scoring thresholds (0-100). These are ONLY used to color-code
-# the score badge for the admin in the Approvals tab (green/yellow/red) -
-# they no longer drive any auto-approve / auto-reject routing decision.
+# PlantMind AI / Decision Engine thresholds (0-100). These DRIVE the actual
+# auto-publish / admin-review / auto-reject routing decision below.
 AI_AUTO_APPROVE_MIN_SCORE = int(os.getenv("AI_AUTO_APPROVE_MIN_SCORE", "90"))
 AI_AUTO_REJECT_MAX_SCORE  = int(os.getenv("AI_AUTO_REJECT_MAX_SCORE", "70"))
+
+AUTO_APPROVER_NAME = "PlantMind AI (Auto-Approved)"
+AUTO_REJECTOR_NAME = "PlantMind AI (Auto-Rejected)"
 
 app = Flask(__name__)
 CORS(app)
@@ -176,6 +227,125 @@ def insert_approval_audit_row(record, ai_result):
 
 
 # --------------------------------------------------------------------------
+# DECISION ENGINE HELPERS
+# --------------------------------------------------------------------------
+def decide_from_score(score):
+    """Pure threshold routing used by the automatic decision engine."""
+    if score >= AI_AUTO_APPROVE_MIN_SCORE:
+        return "approve"
+    if score < AI_AUTO_REJECT_MAX_SCORE:
+        return "reject"
+    return "review"
+
+
+def publish_pending_record(record, decided_by):
+    """
+    Immediately publish a pending upload/update record to the Knowledge Base
+    (used by the AUTO-APPROVE path, both the live upload flow and the batch
+    "Automate" button). Writes document_history, an Approved audit row in
+    document_approvals, and an activity_log entry - exactly like a manual
+    admin approval would, just without the click. Returns the document_id.
+    """
+    if record.get("document_id"):
+        doc_id = record["document_id"]
+        updates = {
+            "version": record["proposed_version"],
+            "status": "Active",
+            "content": record["new_content"],
+            "updated_at": now_iso(),
+        }
+        if record.get("file_path"):
+            updates.update({
+                "file_path": record["file_path"],
+                "file_name": record["file_name"],
+                "file_type": record["file_type"],
+                "file_size": record["file_size"],
+            })
+        supabase.table("documents").update(updates).eq("id", doc_id).execute()
+    else:
+        doc_id = str(uuid.uuid4())
+        supabase.table("documents").insert({
+            "id": doc_id,
+            "name": record["doc_name"],
+            "icon": pick_icon(record.get("file_name") or record["doc_name"]),
+            "version": record["proposed_version"],
+            "status": "Active",
+            "summary": "",
+            "content": record["new_content"],
+            "file_path": record.get("file_path"),
+            "file_name": record.get("file_name"),
+            "file_type": record.get("file_type"),
+            "file_size": record.get("file_size"),
+            "uploaded_by": record["submitted_by"],
+            "created_at": now_iso(),
+            "updated_at": now_iso(),
+        }).execute()
+
+    supabase.table("document_history").insert({
+        "id": str(uuid.uuid4()), "document_id": doc_id, "version": record["proposed_version"],
+        "updated_by": record["submitted_by"],
+        "changes": f"Automatically published by {decided_by}.",
+        "content_snapshot": record["new_content"], "created_at": now_iso(),
+    }).execute()
+
+    # If this record came from an existing document_approvals row (batch
+    # automation path), update that row in place instead of inserting a
+    # duplicate audit entry.
+    if record.get("id"):
+        try:
+            res = supabase.table("document_approvals").update({
+                "status": "Approved", "decided_at": now_iso(), "decided_by": decided_by,
+            }).eq("id", record["id"]).execute()
+            if not res.data:
+                raise Exception("no matching row")
+        except Exception:
+            audit = dict(record)
+            audit["status"] = "Approved"
+            audit["decided_at"] = now_iso()
+            audit["decided_by"] = decided_by
+            try:
+                supabase.table("document_approvals").insert(audit).execute()
+            except Exception as e:
+                print("[WARN] Could not write auto-approval audit row:", e)
+
+    log_activity(decided_by, "approved_edit", record["doc_name"], f"Auto-published {record['proposed_version']}")
+    return doc_id
+
+
+def discard_pending_record(record, decided_by, reason=""):
+    """
+    Immediately discard an upload/update record (used by the AUTO-REJECT
+    path, both the live upload flow and the batch "Automate" button).
+    Deletes the uploaded file from storage and writes a Rejected audit row +
+    activity_log entry so the decision is fully auditable even though
+    nothing was ever published.
+    """
+    if record.get("file_path"):
+        delete_from_storage(record["file_path"])
+
+    if record.get("id"):
+        try:
+            res = supabase.table("document_approvals").update({
+                "status": "Rejected", "decided_at": now_iso(), "decided_by": decided_by,
+                "file_path": None,
+            }).eq("id", record["id"]).execute()
+            if not res.data:
+                raise Exception("no matching row")
+        except Exception:
+            audit = dict(record)
+            audit["status"] = "Rejected"
+            audit["decided_at"] = now_iso()
+            audit["decided_by"] = decided_by
+            audit["file_path"] = None
+            try:
+                supabase.table("document_approvals").insert(audit).execute()
+            except Exception as e:
+                print("[WARN] Could not write auto-rejection audit row:", e)
+
+    log_activity(decided_by, "rejected_edit", record["doc_name"], reason or "Automatically rejected - low match score")
+
+
+# --------------------------------------------------------------------------
 # TEXT EXTRACTION  ->  PDF / DOCX / plain text
 # --------------------------------------------------------------------------
 def extract_pdf_text(file_bytes):
@@ -236,6 +406,8 @@ def extract_text(file_bytes, mimetype, filename):
 
 
 def ensure_doc_content(doc):
+    """Returns the document's text content, extracting + caching it from
+    storage on first use if the `content` column is empty."""
     existing = (doc.get("content") or "").strip()
     if existing:
         return existing
@@ -265,6 +437,38 @@ def ensure_doc_content(doc):
     return text
 
 
+def ensure_approval_new_content(approval):
+    """
+    Returns the proposed/new text content for an approval row, extracting it
+    from the attached file in Storage (and caching it back onto the row) if
+    the `new_content` column is empty. Mirrors ensure_doc_content() but for
+    document_approvals rows.
+    """
+    existing = (approval.get("new_content") or "").strip()
+    if existing:
+        return existing
+
+    file_path = approval.get("file_path")
+    if not file_path or supabase is None:
+        return ""
+
+    try:
+        file_bytes = supabase.storage.from_(STORAGE_BUCKET).download(file_path)
+    except Exception as e:
+        print(f"[WARN] Could not download {file_path} for extraction:", e)
+        return ""
+
+    text = extract_text(file_bytes, approval.get("file_type"), approval.get("file_name") or file_path)
+
+    if text and approval.get("id"):
+        try:
+            supabase.table("document_approvals").update({"new_content": text}).eq("id", approval["id"]).execute()
+        except Exception as e:
+            print("[WARN] Could not cache extracted approval content:", e)
+
+    return text
+
+
 def upload_bytes_to_storage(file_bytes, mimetype, original_filename, folder="docs"):
     unique_path = f"{folder}/{uuid.uuid4().hex}_{secure_filename(original_filename)}"
     if supabase:
@@ -284,9 +488,8 @@ def delete_from_storage(file_path):
 
 
 # --------------------------------------------------------------------------
-# TITLE MATCHING  ->  compares a proposed upload's name against the existing
-# Knowledge Base ("the manual") - ADVISORY ONLY, shown to the admin as
-# context. It no longer decides approve/reject on its own.
+# TITLE MATCHING  ->  cheap, dependency-free first pass used to find which
+# Knowledge Base document (if any) a filename/doc_name is likely about.
 # --------------------------------------------------------------------------
 def normalize_title(name):
     if not name:
@@ -315,14 +518,96 @@ def find_best_title_match(candidate_name, existing_docs):
     return round(best_score), best_doc
 
 
+def content_similarity(text_a, text_b, sample_chars=3000):
+    """Cheap, dependency-free fallback similarity score (0-100) between two
+    blocks of text. Only used when Groq is unavailable or errors out."""
+    a = (text_a or "").strip().lower()[:sample_chars]
+    b = (text_b or "").strip().lower()[:sample_chars]
+    if not a or not b:
+        return None
+    return round(difflib.SequenceMatcher(None, a, b).ratio() * 100)
+
+
+# --------------------------------------------------------------------------
+# GROQ-POWERED CONTENT COMPARISON  ->  the actual "compare file from
+# Knowledge Base against file from Approval" step, used by BOTH the
+# single-upload Decision Engine and the batch "Automate" button.
+# --------------------------------------------------------------------------
+def groq_compare_documents(doc_name, current_text, proposed_text):
+    """
+    Asks Groq to score how consistent/same-topic two document excerpts are.
+    Returns {"score": int 0-100, "reasoning": str}. Falls back to a
+    dependency-free text-diff score if Groq is unavailable or errors.
+    """
+    current_text = (current_text or "").strip()
+    proposed_text = (proposed_text or "").strip()
+
+    if not current_text or not proposed_text:
+        return {"score": 0, "reasoning": "One of the two documents had no extractable text to compare."}
+
+    if groq_client is None:
+        fallback = content_similarity(current_text, proposed_text) or 0
+        return {"score": fallback, "reasoning": "Groq is not configured; used a plain text-similarity fallback."}
+
+    system_prompt = """You are a document-comparison engine for OnlyTech's internal Knowledge Base.
+You will be shown the CURRENT PUBLISHED VERSION of a document and a PROPOSED
+REPLACEMENT / NEW UPLOAD. Decide how consistent they are in subject matter,
+scope, and structure - i.e. is the proposed file clearly an updated version
+of the same document (same procedures/policy/system, just revised), or is it
+a substantially different, unrelated, low-quality, or placeholder file?
+
+Score guide:
+- 90-100: Same topic, clearly a legitimate updated version. Safe to auto-publish.
+- 70-89: Related / plausible update but with notable gaps or differences. Needs a human look.
+- 0-69: Different topic, inconsistent, low-quality, or junk content. Should be rejected.
+
+Reply with ONLY a compact JSON object, nothing else - no markdown fences, no commentary:
+{"score": <integer 0-100>, "reasoning": "<one or two plain sentences>"}"""
+
+    user_content = (
+        f"Document title: {doc_name}\n\n"
+        f"--- CURRENT PUBLISHED VERSION (excerpt) ---\n{current_text[:MAX_COMPARE_CHARS]}\n\n"
+        f"--- PROPOSED REPLACEMENT / UPLOAD (excerpt) ---\n{proposed_text[:MAX_COMPARE_CHARS]}"
+    )
+
+    try:
+        completion = groq_client.chat.completions.create(
+            model=GROQ_MODEL_NAME,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content},
+            ],
+            temperature=0.1,
+            max_tokens=250,
+        )
+        raw = (completion.choices[0].message.content or "").strip()
+        if raw.startswith("```"):
+            raw = raw.strip("`")
+            if raw.lower().startswith("json"):
+                raw = raw[4:]
+        raw = raw.strip()
+
+        parsed = json.loads(raw)
+        score = int(parsed.get("score", 50))
+        score = max(0, min(100, score))
+        reasoning = str(parsed.get("reasoning", "")).strip()[:500] or "Groq evaluated this comparison automatically."
+        return {"score": score, "reasoning": reasoning}
+    except Exception as e:
+        print("[WARN] groq_compare_documents failed:", e)
+        fallback = content_similarity(current_text, proposed_text)
+        if fallback is None:
+            fallback = 0
+        return {"score": fallback, "reasoning": f"Groq comparison failed ({e}); used a plain text-similarity fallback."}
+
+
 def score_upload_by_title_match(filename, doc_name, content_text):
     """
-    ADVISORY ONLY: scores how well a proposed employee upload matches an
-    existing PUBLISHED document title in the Knowledge Base (the "manual").
-    This is shown to the admin as context in the Approvals tab. It never
-    decides the outcome - every upload always goes to Pending review.
+    Runs the full "check Knowledge Base -> find title match -> Groq-compare
+    content -> score" pipeline for a NEW employee upload and returns the
+    routing decision for the Decision Engine:
 
-    Returns: {"decision": "review", "score", "reasoning", "matched_document"}
+        {"decision": "approve" | "review" | "reject", "score": int,
+         "reasoning": str, "matched_document": dict | None}
     """
     existing_docs = []
     if supabase is not None:
@@ -335,28 +620,109 @@ def score_upload_by_title_match(filename, doc_name, content_text):
 
     title_score, matched_doc = find_best_title_match(doc_name or filename, existing_docs)
 
-    # Always "review" - routing decision belongs to the admin, not the score.
-    decision = "review"
+    content_score = None
+    if matched_doc:
+        existing_content = ensure_doc_content(matched_doc)
+        groq_result = groq_compare_documents(doc_name or filename, existing_content, content_text)
+        content_score = groq_result["score"]
+
+    if content_score is not None:
+        # Title tells us "is this probably the same document"; Groq's
+        # content comparison confirms "does it actually say the same kind
+        # of thing". Weight content higher since it's the more reliable
+        # signal, but still require some title agreement.
+        combined_score = round(title_score * 0.3 + content_score * 0.7)
+    else:
+        combined_score = title_score
+
+    decision = decide_from_score(combined_score)
+    # Never auto-approve if we don't actually have a document to publish
+    # a new version against.
+    if decision == "approve" and not matched_doc:
+        decision = "review"
 
     if matched_doc:
-        reasoning = (f'Title match {title_score}% against existing manual entry '
-                     f'"{matched_doc["name"]}" ({matched_doc.get("version", "v1.0")}).')
+        reasoning = (f'Title match {title_score}% against "{matched_doc["name"]}" '
+                     f'({matched_doc.get("version", "v1.0")}); Groq content comparison '
+                     f'{content_score if content_score is not None else "n/a"}%. Combined score: {combined_score}%.')
     else:
-        reasoning = "No comparable document title was found in the Knowledge Base manual."
-
-    # Fold in a short content-quality note for the audit trail (non-decisive).
-    try:
-        content_result = score_upload_with_ai(filename, content_text, doc_name)
-        reasoning += f" Content quality read: {content_result.get('score')}/100 - {content_result.get('reasoning')}"
-    except Exception as e:
-        print("[WARN] Supplementary content scoring failed:", e)
+        reasoning = (f"No comparable document title was found in the Knowledge Base "
+                     f"(best title match: {title_score}%).")
 
     return {
         "decision": decision,
-        "score": title_score,
+        "score": combined_score,
         "reasoning": reasoning[:900],
         "matched_document": matched_doc,
     }
+
+
+def score_approval_with_groq(approval):
+    """
+    Re-scores an EXISTING document_approvals row (used by the batch
+    "Automate" button). This is the "compare file from Knowledge Base
+    against file from Approval" step:
+
+      1. Resolve which Knowledge Base document this approval is about -
+         either the linked document_id (fast path, already resolved when
+         the employee submitted it) or, if there is none (a brand-new
+         upload with no target yet), fall back to a fresh title match.
+      2. Pull the KB document's CURRENT text (ensure_doc_content) and the
+         approval's PROPOSED text (ensure_approval_new_content), extracting
+         from Supabase Storage on demand if either is missing.
+      3. Ask Groq to score how consistent the two are (0-100).
+      4. Combine with a title-match score exactly like the live upload path,
+         so a batch re-score gives the same kind of number a fresh upload
+         would have gotten.
+
+    Returns: {"score": int, "reasoning": str, "matched_document": dict|None}
+    """
+    doc_name = approval.get("doc_name") or "Unknown Document"
+    document_id = approval.get("document_id")
+    proposed_text = ensure_approval_new_content(approval)
+
+    matched_doc = None
+    title_score = 0
+
+    if document_id and supabase is not None:
+        try:
+            res = supabase.table("documents").select(
+                "id,name,version,content,status,file_path,file_type,file_name"
+            ).eq("id", document_id).execute()
+            if res.data:
+                matched_doc = res.data[0]
+                title_score = 100  # explicitly linked at submission time
+        except Exception as e:
+            print("[WARN] Could not fetch linked document for approval:", e)
+
+    if matched_doc is None:
+        existing_docs = []
+        if supabase is not None:
+            try:
+                existing_docs = supabase.table("documents").select(
+                    "id,name,version,content,status,file_path,file_type,file_name"
+                ).eq("status", "Active").execute().data or []
+            except Exception as e:
+                print("[WARN] Could not fetch documents for approval title match:", e)
+        title_score, matched_doc = find_best_title_match(doc_name, existing_docs)
+
+    if matched_doc is None:
+        return {
+            "score": title_score,
+            "reasoning": f"No comparable document was found in the Knowledge Base (best title match: {title_score}%).",
+            "matched_document": None,
+        }
+
+    current_text = ensure_doc_content(matched_doc) or (approval.get("old_content") or "")
+    groq_result = groq_compare_documents(doc_name, current_text, proposed_text)
+    content_score = groq_result["score"]
+
+    combined_score = round(title_score * 0.3 + content_score * 0.7)
+    reasoning = (f'Linked/matched to "{matched_doc["name"]}" ({matched_doc.get("version", "v1.0")}) '
+                 f'- title match {title_score}%, Groq content comparison {content_score}% '
+                 f'({groq_result["reasoning"]}). Combined score: {combined_score}%.')
+
+    return {"score": combined_score, "reasoning": reasoning[:900], "matched_document": matched_doc}
 
 
 # --------------------------------------------------------------------------
@@ -416,18 +782,21 @@ document is too short or generic to have distinct key points."""
 
 
 # --------------------------------------------------------------------------
-# AI UPLOAD SCREENING  ->  ADVISORY ONLY general content-quality read, used
-# as supplementary context in score_upload_by_title_match and shown to the
-# admin for the "Update Docs" replacement flow via propose_document_update.
-# It never decides the outcome on its own anymore.
+# AI UPLOAD SCREENING  ->  used for REPLACEMENT uploads of an existing
+# document (propose_document_update). Also feeds the Decision Engine.
 # --------------------------------------------------------------------------
 def score_upload_with_ai(filename, content_text, doc_name):
     """
-    Ask Groq to evaluate a freshly uploaded/updated file against OnlyTech's
-    knowledge-base standards and return a 0-100 readiness score, PURELY as
-    advisory context for the admin. The routing decision is always "review".
+    Ask Groq to evaluate a freshly uploaded replacement file against
+    OnlyTech's knowledge-base standards and return a 0-100 readiness score
+    plus the Decision Engine's routing decision.
 
-    Returns: {"decision": "review", "score": int 0-100, "reasoning": str}
+    Returns: {"decision": "approve" | "review" | "reject", "score": int, "reasoning": str}
+
+    Falls back to "review" (never auto-reject/auto-approve) whenever the AI
+    genuinely can't evaluate the file (Groq unavailable, no extractable
+    text, request error) - those are infrastructure gaps, not a real
+    low-quality signal, so a human should still take a look.
     """
     if groq_client is None:
         return {"decision": "review", "score": 0,
@@ -443,13 +812,11 @@ Score how ready a submitted document is to be published as-is, based on:
 - Is it a real, coherent IT/operations document (SOP, policy, runbook, guide, report, etc.)?
 - Is it free of placeholder, junk, spam, or test content?
 - Does it look complete, professional, and safe to publish without edits?
-- If it is a REPLACEMENT for an existing document, does it stay on-topic and consistent
+- Since this is a REPLACEMENT for an existing document, does it stay on-topic and consistent
   with the kind of document it is replacing (not a completely unrelated file)?
 
 Reply with ONLY a compact JSON object, nothing else - no markdown fences, no commentary:
-{"score": <integer 0-100>, "reasoning": "<one or two plain sentences>"}
-
-This score is advisory context for a human admin reviewer, not a final decision."""
+{"score": <integer 0-100>, "reasoning": "<one or two plain sentences>"}"""
 
     try:
         completion = groq_client.chat.completions.create(
@@ -476,8 +843,7 @@ This score is advisory context for a human admin reviewer, not a final decision.
         if not reasoning:
             reasoning = "PlantMind AI evaluated this document automatically."
 
-        # Always "review" - the score is advisory only.
-        return {"decision": "review", "score": score, "reasoning": reasoning}
+        return {"decision": decide_from_score(score), "score": score, "reasoning": reasoning}
     except Exception as e:
         print("[WARN] AI upload scoring failed:", e)
         return {"decision": "review", "score": 0,
@@ -497,9 +863,10 @@ def health():
         "storage_bucket": STORAGE_BUCKET,
         "pypdf_available": PYPDF_AVAILABLE,
         "docx_available": DOCX_AVAILABLE,
+        "groq_comparison_enabled": groq_client is not None,
         "ai_auto_approve_min_score": AI_AUTO_APPROVE_MIN_SCORE,
         "ai_auto_reject_max_score": AI_AUTO_REJECT_MAX_SCORE,
-        "all_uploads_require_admin_approval": True,
+        "auto_decision_routing_enabled": True,
         "time": now_iso()
     })
 
@@ -718,11 +1085,17 @@ def propose_upload():
     """
     Employee-facing NEW document upload endpoint (plain Documents tab).
 
-    ALWAYS routes to the admin Approvals tab as a Pending request. Nothing
-    is ever published to the Knowledge Base and no uploaded file is ever
-    deleted without an explicit admin decision via /api/approvals/<id>/decide.
-    PlantMind AI's title-match score is computed and attached purely as
-    advisory context for the admin.
+    Runs the full Decision Engine pipeline:
+      1. Extract text from the uploaded file
+      2. Search the Knowledge Base for the best TITLE match
+      3. Groq-COMPARE the uploaded content against that matched document's content
+      4. Combine into a single match score
+      5. Route: >= approve threshold -> auto-publish immediately
+                <  reject threshold  -> auto-reject immediately (file deleted)
+                in between           -> Pending row in the admin Approvals tab
+      6. Every outcome is written to document_approvals + activity_log so the
+         admin dashboard (Overview stats, Recent Activity, Approvals tab)
+         updates automatically without a manual refresh.
     """
     if "file" not in request.files:
         return jsonify({"error": "file is required"}), 400
@@ -746,10 +1119,8 @@ def propose_upload():
                      "reasoning": f"Title-match scoring failed: {e}", "matched_document": None}
 
     matched_doc = ai_result.get("matched_document")
+    decision = ai_result.get("decision", "review")
 
-    # Compute what version this upload would become, and against which
-    # document_id, based on whether we found a matching manual entry.
-    # (Purely informational until the admin approves.)
     if matched_doc:
         old_version = matched_doc.get("version", "v1.0")
         try:
@@ -781,15 +1152,34 @@ def propose_upload():
         "status": "Pending",
         "created_at": now_iso(),
     }
-    insert_approval_audit_row(pending_record, ai_result)
 
+    if decision == "approve":
+        publish_pending_record(pending_record, AUTO_APPROVER_NAME)
+        return jsonify({
+            "outcome": "approved",
+            "message": f'"{name}" matched "{matched_doc["name"]}" at {ai_result["score"]}% and was '
+                       f'automatically published as {proposed_version}.',
+            "ai": ai_result,
+        }), 200
+
+    if decision == "reject":
+        discard_pending_record(pending_record, AUTO_REJECTOR_NAME, ai_result["reasoning"])
+        return jsonify({
+            "outcome": "rejected",
+            "message": f'"{name}" scored only {ai_result["score"]}% against the Knowledge Base and was '
+                       f'automatically rejected. {ai_result["reasoning"]}',
+            "ai": ai_result,
+        }), 200
+
+    # decision == "review"
+    insert_approval_audit_row(pending_record, ai_result)
     log_activity(
         uploaded_by, "proposed_edit", name,
-        f"Submitted for admin review — title match {ai_result['score']}%: {ai_result['reasoning']}"
+        f"Submitted for admin review — match score {ai_result['score']}%: {ai_result['reasoning']}"
     )
     return jsonify({
         "outcome": "review",
-        "message": f"\"{name}\" was submitted and is now pending admin approval (title match {ai_result['score']}%, shown to the admin for context).",
+        "message": f'"{name}" scored {ai_result["score"]}% (needs a human look) and is now pending admin approval.',
         "ai": ai_result,
     }), 202
 
@@ -801,11 +1191,9 @@ def propose_document_update(doc_id):
     Employee-facing REPLACEMENT upload for an EXISTING document, from the
     "Update Docs" dashboard.
 
-    ALWAYS routes to the admin Approvals tab as a Pending request. Nothing
-    is ever published to the Knowledge Base and no uploaded file is ever
-    deleted without an explicit admin decision via /api/approvals/<id>/decide.
-    PlantMind AI's content-quality score is computed and attached purely as
-    advisory context for the admin.
+    Runs the same Decision Engine as propose_upload, but the score comes
+    from PlantMind AI's content-quality/consistency read (since the target
+    document is already known - there's no title match to do).
     """
     existing = supabase.table("documents").select("*").eq("id", doc_id).execute()
     if not existing.data:
@@ -840,6 +1228,8 @@ def propose_document_update(doc_id):
     except Exception as e:
         ai_result = {"decision": "review", "score": 0, "reasoning": f"AI scoring failed: {e}"}
 
+    decision = ai_result.get("decision", "review")
+
     pending_record = {
         "id": str(uuid.uuid4()),
         "document_id": doc_id,
@@ -856,13 +1246,31 @@ def propose_document_update(doc_id):
         "status": "Pending",
         "created_at": now_iso(),
     }
-    insert_approval_audit_row(pending_record, ai_result)
 
+    if decision == "approve":
+        publish_pending_record(pending_record, AUTO_APPROVER_NAME)
+        return jsonify({
+            "outcome": "approved",
+            "message": f"PlantMind AI scored this {ai_result['score']}/100 and automatically published it as {proposed_version}.",
+            "approval_id": pending_record["id"], "proposed_version": proposed_version, "ai": ai_result,
+        }), 200
+
+    if decision == "reject":
+        discard_pending_record(pending_record, AUTO_REJECTOR_NAME, reason or ai_result["reasoning"])
+        return jsonify({
+            "outcome": "rejected",
+            "message": f"PlantMind AI scored this only {ai_result['score']}/100 and it was automatically rejected. {ai_result['reasoning']}",
+            "approval_id": pending_record["id"], "ai": ai_result,
+        }), 200
+
+    # decision == "review"
+    insert_approval_audit_row(pending_record, ai_result)
     log_activity(submitted_by, "proposed_edit", current["name"],
                  f"Needs admin review — PlantMind AI score {ai_result['score']}/100: {reason or ai_result['reasoning']}")
     return jsonify({
-        "message": f"Update submitted — PlantMind AI scored this {ai_result['score']}/100 (shown to the admin for context). An admin will review it before it's published.",
-        "outcome": "review", "approval_id": pending_record["id"], "proposed_version": proposed_version, "ai": ai_result,
+        "outcome": "review",
+        "message": f"Update submitted — PlantMind AI scored this {ai_result['score']}/100. An admin will review it before it's published.",
+        "approval_id": pending_record["id"], "proposed_version": proposed_version, "ai": ai_result,
     }), 201
 
 
@@ -874,8 +1282,7 @@ def upload_document():
     immediately with no approval step. Used by the admin Command Center's
     Knowledge Base "Upload File" button ONLY (admin is already the approver).
     Employee uploads go through /api/documents/propose-upload or
-    /api/documents/<id>/propose-update instead, and ALWAYS require an
-    explicit admin decision in the Approvals tab.
+    /api/documents/<id>/propose-update instead, which run the Decision Engine.
     """
     if "file" not in request.files:
         return jsonify({"error": "file is required"}), 400
@@ -1163,13 +1570,10 @@ def download_approval_file(approval_id):
 @require_supabase
 def decide_approval(approval_id):
     """
-    THE ONLY PLACE a proposed upload/update is ever published or discarded.
-    Every employee submission (new upload or replacement) lands here as
-    Pending and stays that way until an admin explicitly approves or
-    rejects it. Approving publishes the file to the Knowledge Base
-    (updating the matched document if document_id is set, otherwise
-    creating a brand new document); rejecting deletes the uploaded file and
-    removes the request.
+    Manual admin decision for whatever landed in the review band (70-89%).
+    Approving publishes the file to the Knowledge Base (updating the
+    matched document if document_id is set, otherwise creating a brand new
+    document); rejecting deletes the uploaded file and removes the request.
     """
     data = request.get_json(force=True) or {}
     approve = bool(data.get("approve"))
@@ -1238,6 +1642,103 @@ def decide_approval(approval_id):
         log_activity(decided_by, "rejected_edit", app_row["doc_name"], "Edit request rejected and file removed")
 
     return jsonify({"message": "Decision recorded", "approve": approve}), 200
+
+
+@app.route("/api/approvals/automate-batch", methods=["POST"])
+@require_supabase
+def automate_batch_approvals():
+    """
+    Automate processing of ALL currently-Pending approvals using the
+    Groq-powered Decision Engine (score_approval_with_groq):
+
+    1. For each pending row, resolve the Knowledge Base document it's about
+       (via document_id, or a fresh title match for brand-new uploads).
+    2. Pull that document's CURRENT text and the approval's PROPOSED text
+       (extracting from Storage on demand if needed).
+    3. Ask Groq to score how consistent the two are (0-100), combine with a
+       title-match score.
+    4. Decision Engine:
+         Score >= AI_AUTO_APPROVE_MIN_SCORE  -> Auto Publish
+         Score in the review band            -> stays Pending (needs a human)
+         Score <  AI_AUTO_REJECT_MAX_SCORE   -> Auto Reject (file deleted)
+    5. Every outcome is written back to document_approvals + activity_log,
+       so Overview / Recent Activity / the Approvals tab update automatically.
+
+    Returns: {"processed", "approved", "rejected", "reviewed", "results": [...]}
+    """
+    data = request.get_json(force=True) or {}
+    decided_by = data.get("decided_by", "PlantMind AI (Batch Auto)")
+
+    pending = supabase.table("document_approvals").select("*").eq("status", "Pending") \
+        .order("created_at", desc=False).execute().data or []
+
+    if not pending:
+        return jsonify({
+            "processed": 0, "approved": 0, "rejected": 0, "reviewed": 0,
+            "results": [], "message": "No pending approvals to process"
+        }), 200
+
+    results = []
+    approved_count = 0
+    rejected_count = 0
+    reviewed_count = 0
+
+    for approval in pending:
+        doc_name = approval.get("doc_name", "Unknown")
+        try:
+            ai_result = score_approval_with_groq(approval)
+            score = ai_result.get("score", 0)
+            reasoning = ai_result.get("reasoning", "Batch automated scoring")
+            matched_doc = ai_result.get("matched_document")
+
+            decision = decide_from_score(score)
+            # Never auto-approve a brand-new upload that has nothing in the
+            # Knowledge Base to actually update.
+            if decision == "approve" and not matched_doc:
+                decision = "review"
+
+            if decision == "approve":
+                publish_pending_record(approval, decided_by)
+                approved_count += 1
+                results.append({"id": approval["id"], "doc_name": doc_name, "decision": "approved",
+                                 "score": score, "reason": reasoning})
+
+            elif decision == "reject":
+                discard_pending_record(approval, decided_by, reasoning)
+                rejected_count += 1
+                results.append({"id": approval["id"], "doc_name": doc_name, "decision": "rejected",
+                                 "score": score, "reason": reasoning})
+
+            else:  # review — leave it Pending, just record the latest score for the admin UI
+                reviewed_count += 1
+                try:
+                    supabase.table("document_approvals").update({
+                        "ai_score": score, "ai_reasoning": reasoning,
+                    }).eq("id", approval["id"]).execute()
+                except Exception:
+                    pass  # columns may not exist on an older schema — non-fatal
+                results.append({"id": approval["id"], "doc_name": doc_name, "decision": "review",
+                                 "score": score, "reason": reasoning})
+
+        except Exception as e:
+            print(f"[WARN] Batch processing failed for {approval.get('id')}: {e}")
+            results.append({"id": approval.get("id"), "doc_name": doc_name, "decision": "error", "reason": str(e)})
+
+    log_activity(
+        decided_by, "batch_automate_approvals", "Batch Processing",
+        f"Processed {len(pending)} pending approvals: {approved_count} approved, "
+        f"{rejected_count} rejected, {reviewed_count} kept for review"
+    )
+
+    return jsonify({
+        "processed": len(pending),
+        "approved": approved_count,
+        "rejected": rejected_count,
+        "reviewed": reviewed_count,
+        "results": results,
+        "message": f"Batch automation complete: {approved_count} approved, "
+                   f"{rejected_count} rejected, {reviewed_count} need human review"
+    }), 200
 
 
 # --------------------------------------------------------------------------
@@ -1401,7 +1902,8 @@ def stats_overview():
 
 
 # --------------------------------------------------------------------------
-# PLANTMIND AI  ->  Groq, grounded on real extracted document text
+# PLANTMIND AI  ->  Groq, grounded on real extracted document text +
+# approvals + version history + activity log + tickets + employees
 # --------------------------------------------------------------------------
 MODE_INSTRUCTIONS = {
     "general":    "Answer the question clearly and concisely for an employee using the company knowledge base.",
@@ -1412,12 +1914,17 @@ MODE_INSTRUCTIONS = {
 
 
 def find_relevant_documents(question, limit=3):
+    """
+    Search the documents table for relevant records. NOTE: this intentionally
+    no longer filters to status == "Active" - Draft/Updated documents are
+    included too, so PlantMind AI can talk about ANY document in the
+    Knowledge Base, not just the currently-published one.
+    """
     if supabase is None:
         return []
     try:
         res = supabase.table("documents") \
-            .select("id,name,content,summary,version,file_path,file_type,file_name") \
-            .eq("status", "Active") \
+            .select("id,name,content,summary,version,status,file_path,file_type,file_name") \
             .execute()
         docs = res.data or []
     except Exception:
@@ -1439,6 +1946,199 @@ def find_relevant_documents(question, limit=3):
     return [d for _, d in scored[:limit]]
 
 
+def find_relevant_incidents(question, limit=3):
+    if supabase is None:
+        return []
+    try:
+        res = supabase.table("maintenance_tickets") \
+            .select("id,ticket_id,system_name,issue_type,severity,description,status,resolution_notes,reported_by,resolved_by,created_at,resolved_at") \
+            .execute()
+        tickets = res.data or []
+    except Exception:
+        return []
+
+    q_words = set(w.lower() for w in question.split() if len(w) > 2)
+    if not q_words:
+        return []
+
+    scored = []
+    for ticket in tickets:
+        text = " ".join([
+            ticket.get("ticket_id") or "",
+            ticket.get("system_name") or "",
+            ticket.get("issue_type") or "",
+            ticket.get("severity") or "",
+            ticket.get("description") or "",
+            ticket.get("resolution_notes") or "",
+            ticket.get("status") or "",
+            ticket.get("reported_by") or "",
+            ticket.get("resolved_by") or "",
+        ]).lower()
+        score = sum(1 for w in q_words if w in text)
+        if score > 0:
+            scored.append((score, ticket))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [t for _, t in scored[:limit]]
+
+
+def find_relevant_employees(question, limit=3):
+    """Search for employees relevant to the question."""
+    if supabase is None:
+        return []
+    try:
+        res = supabase.table("users") \
+            .select("employee_id,name,email,department,designation,role") \
+            .execute()
+        employees = res.data or []
+    except Exception:
+        return []
+
+    q_words = set(w.lower() for w in question.split() if len(w) > 2)
+    if not q_words:
+        return []
+
+    scored = []
+    for emp in employees:
+        text = " ".join([
+            emp.get("employee_id") or "",
+            emp.get("name") or "",
+            emp.get("email") or "",
+            emp.get("department") or "",
+            emp.get("designation") or "",
+            emp.get("role") or "",
+        ]).lower()
+        score = sum(1 for w in q_words if w in text)
+        if score > 0:
+            scored.append((score, emp))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [e for _, e in scored[:limit]]
+
+
+def find_relevant_approvals(question, limit=4):
+    """
+    Search document_approvals (Pending / Approved / Rejected) so PlantMind AI
+    knows about files that are still in review or already decided - not just
+    documents that made it all the way into the published Knowledge Base.
+    This is what lets it answer things like "what's the status of the VPN
+    policy upload" or "who submitted the onboarding SOP update".
+    """
+    if supabase is None:
+        return []
+    try:
+        rows = supabase.table("document_approvals") \
+            .select("id,doc_name,status,submitted_by,decided_by,decided_at,"
+                    "old_version,proposed_version,new_content,ai_score,ai_reasoning,"
+                    "file_name,created_at") \
+            .order("created_at", desc=True).limit(300).execute().data or []
+    except Exception as e:
+        print("[WARN] find_relevant_approvals failed:", e)
+        return []
+
+    q_words = set(w.lower() for w in question.split() if len(w) > 2)
+    if not q_words:
+        return []
+
+    scored = []
+    for row in rows:
+        text = " ".join([
+            row.get("doc_name") or "", row.get("status") or "",
+            row.get("submitted_by") or "", row.get("decided_by") or "",
+            row.get("file_name") or "",
+            (row.get("new_content") or "")[:500], row.get("ai_reasoning") or "",
+        ]).lower()
+        score = sum(1 for w in q_words if w in text)
+        if score:
+            scored.append((score, row))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [r for _, r in scored[:limit]]
+
+
+def find_relevant_history(question, limit=4):
+    """
+    Search document_history so PlantMind AI can answer "who changed this
+    document and what did the previous version say" - real, per-version
+    provenance rather than just the latest published text.
+    """
+    if supabase is None:
+        return []
+    try:
+        rows = supabase.table("document_history") \
+            .select("id,document_id,version,updated_by,changes,content_snapshot,created_at") \
+            .order("created_at", desc=True).limit(300).execute().data or []
+    except Exception as e:
+        print("[WARN] find_relevant_history failed:", e)
+        return []
+
+    q_words = set(w.lower() for w in question.split() if len(w) > 2)
+    if not q_words:
+        return []
+
+    scored = []
+    for row in rows:
+        text = " ".join([
+            row.get("version") or "", row.get("updated_by") or "",
+            row.get("changes") or "", (row.get("content_snapshot") or "")[:300],
+        ]).lower()
+        score = sum(1 for w in q_words if w in text)
+        if score:
+            scored.append((score, row))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    top = [r for _, r in scored[:limit]]
+
+    # Attach the parent document's name so the context reads naturally
+    # instead of just showing a raw document_id.
+    if top:
+        doc_ids = list({r["document_id"] for r in top if r.get("document_id")})
+        if doc_ids:
+            try:
+                docs = supabase.table("documents").select("id,name").in_("id", doc_ids).execute().data or []
+                name_map = {d["id"]: d["name"] for d in docs}
+                for r in top:
+                    r["doc_name"] = name_map.get(r.get("document_id"), "Unknown document")
+            except Exception:
+                for r in top:
+                    r["doc_name"] = "Unknown document"
+        else:
+            for r in top:
+                r["doc_name"] = "Unknown document"
+    return top
+
+
+def find_relevant_activity(question, limit=5):
+    """
+    Search activity_log for "who did what, when" - approvals, rejections,
+    incident resolutions, uploads, deletions, batch automation runs - the
+    full audit trail behind every dashboard number.
+    """
+    if supabase is None:
+        return []
+    try:
+        rows = supabase.table("activity_log") \
+            .select("actor,action,target,details,created_at") \
+            .order("created_at", desc=True).limit(400).execute().data or []
+    except Exception as e:
+        print("[WARN] find_relevant_activity failed:", e)
+        return []
+
+    q_words = set(w.lower() for w in question.split() if len(w) > 2)
+    if not q_words:
+        return []
+
+    scored = []
+    for row in rows:
+        text = " ".join([
+            row.get("actor") or "", row.get("action") or "",
+            row.get("target") or "", row.get("details") or "",
+        ]).lower()
+        score = sum(1 for w in q_words if w in text)
+        if score:
+            scored.append((score, row))
+    scored.sort(key=lambda x: x[0], reverse=True)
+    return [r for _, r in scored[:limit]]
+
+
 @app.route("/api/ai/ask", methods=["POST"])
 def ai_ask():
     if groq_client is None:
@@ -1451,23 +2151,96 @@ def ai_ask():
     if not question:
         return jsonify({"error": "question is required"}), 400
 
-    relevant_docs = find_relevant_documents(question)
+    # Pull live, grounded context from every real data source in Supabase.
+    relevant_docs = find_relevant_documents(question, limit=4)
+    relevant_incidents = find_relevant_incidents(question, limit=3)
+    relevant_employees = find_relevant_employees(question, limit=3)
+    relevant_approvals = find_relevant_approvals(question, limit=4)
+    relevant_history = find_relevant_history(question, limit=4)
+    relevant_activity = find_relevant_activity(question, limit=5)
 
     for d in relevant_docs:
         d["content"] = ensure_doc_content(d)
 
-    context_text = "\n\n".join(
-        f"[Document: {d['name']} ({d.get('version','v1.0')})]\n{(d.get('content') or d.get('summary') or '')[:6000]}"
-        for d in relevant_docs
-    ) or "No matching internal documents were found."
+    context_sections = []
+
+    # Documents (Active AND Draft/Updated)
+    for d in relevant_docs:
+        context_sections.append(
+            f"[Document: {d['name']} ({d.get('version','v1.0')}) — status: {d.get('status','Active')}]\n"
+            f"{(d.get('content') or d.get('summary') or '')[:6000]}"
+        )
+
+    # Incidents (open + resolved)
+    for ticket in relevant_incidents:
+        context_sections.append(
+            f"[Incident: {ticket.get('ticket_id', 'INC')}]\n"
+            f"Status: {ticket.get('status', 'Open')}\n"
+            f"System: {ticket.get('system_name', 'Unknown')}\n"
+            f"Issue Type: {ticket.get('issue_type', 'Unknown')}\n"
+            f"Severity: {ticket.get('severity', 'Unknown')}\n"
+            f"Reported by: {ticket.get('reported_by', 'Unknown')} on {ticket.get('created_at','—')}\n"
+            f"Description: {ticket.get('description', '')}\n"
+            f"Resolved by: {ticket.get('resolved_by') or 'not yet resolved'}"
+            f"{(' on ' + ticket.get('resolved_at')) if ticket.get('resolved_at') else ''}\n"
+            f"Resolution Notes: {ticket.get('resolution_notes') or 'Pending'}"
+        )
+
+    # Approvals queue — Pending / Approved / Rejected requests, with AI score
+    for a in relevant_approvals:
+        context_sections.append(
+            f"[Approval Request: {a.get('doc_name')} — status: {a.get('status')}]\n"
+            f"Submitted by {a.get('submitted_by')} on {a.get('created_at')} "
+            f"({a.get('old_version')} -> {a.get('proposed_version')})\n"
+            f"Attached file: {a.get('file_name') or 'none / text only'}\n"
+            f"AI match score: {a.get('ai_score')} — {a.get('ai_reasoning') or 'no reasoning recorded'}\n"
+            f"Decided by: {a.get('decided_by') or 'not yet decided'} on {a.get('decided_at') or '—'}\n"
+            f"Proposed content excerpt: {(a.get('new_content') or '')[:1500]}"
+        )
+
+    # Version history — real provenance per document
+    for h in relevant_history:
+        context_sections.append(
+            f"[Version History: {h.get('doc_name')} — {h.get('version')}]\n"
+            f"Changed by {h.get('updated_by')} on {h.get('created_at')}\n"
+            f"Change notes: {h.get('changes')}\n"
+            f"Content at that version (excerpt): {(h.get('content_snapshot') or '')[:1000]}"
+        )
+
+    # Activity log — the full audit trail
+    for act in relevant_activity:
+        context_sections.append(
+            f"[Activity: {act.get('actor')} {act.get('action')} on {act.get('target')} "
+            f"at {act.get('created_at')}]\n{act.get('details') or ''}"
+        )
+
+    # Employee directory
+    for emp in relevant_employees:
+        context_sections.append(
+            f"[Employee: {emp.get('name', 'Unknown')} ({emp.get('employee_id', 'ID')})]\n"
+            f"Department: {emp.get('department', 'Unknown')}\n"
+            f"Designation: {emp.get('designation', emp.get('role', 'Unknown'))}\n"
+            f"Email: {emp.get('email', 'Unknown')}\n"
+            f"Role: {emp.get('role', 'Unknown')}"
+        )
+
+    context_text = "\n\n".join(context_sections) or "No matching internal records were found."
 
     instruction = MODE_INSTRUCTIONS.get(mode, MODE_INSTRUCTIONS["general"])
 
-    system_prompt = f"""You are PlantMind AI, the internal IT knowledge assistant for OnlyTech.
+    system_prompt = f"""You are PlantMind AI, the internal knowledge assistant for OnlyTech.
 {instruction}
 
-Use ONLY the context below when it is relevant. If the context does not cover the question,
-say so plainly and give general best-practice guidance instead.
+You have access to real, live data pulled directly from OnlyTech's systems, including:
+published and draft Knowledge Base documents, the document approval queue (pending,
+approved, and rejected uploads with AI match scores), full version history for every
+document, IT incident tickets (open and resolved), the system activity log (who did
+what and when), and the employee directory.
+
+Use ONLY the context below when it is relevant. If the context does not cover the
+question, say so plainly and give general best-practice guidance instead. When asked
+about status, history, or "who did X", answer from the specific records in the
+context (submitter, decider, timestamps, version numbers) rather than guessing.
 
 --- CONTEXT ---
 {context_text}
@@ -1489,7 +2262,26 @@ Respond in clear, well-formatted plain text (short paragraphs / bullet points wh
     except Exception as e:
         return jsonify({"error": f"Groq request failed: {str(e)}"}), 502
 
-    sources = [{"name": d["name"], "version": d.get("version", "v1.0")} for d in relevant_docs]
+    sources = (
+        [{"type": "document", "id": d["id"], "name": d["name"], "version": d.get("version", "v1.0")}
+         for d in relevant_docs]
+        + [{"type": "incident", "id": t.get("id"),
+            "name": f"{t.get('ticket_id', 'Incident')} · {t.get('system_name', 'Unknown')}",
+            "version": t.get("status", "Open")}
+           for t in relevant_incidents]
+        + [{"type": "approval", "id": a.get("id"),
+            "name": f"{a.get('doc_name')} (approval)", "version": a.get("status")}
+           for a in relevant_approvals]
+        + [{"type": "history", "id": h.get("id"),
+            "name": f"{h.get('doc_name')} history", "version": h.get("version")}
+           for h in relevant_history]
+        + [{"type": "activity", "id": None,
+            "name": f"{act.get('actor')}: {act.get('action')}", "version": ""}
+           for act in relevant_activity]
+        + [{"type": "employee", "id": e.get("employee_id"),
+            "name": e.get("name", "Unknown"), "version": e.get("designation", e.get("role", ""))}
+           for e in relevant_employees]
+    )
 
     if supabase is not None:
         try:

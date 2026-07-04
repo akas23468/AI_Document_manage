@@ -742,6 +742,7 @@ tr.clickable-row:hover td { background: #f9fafb; cursor: pointer; }
               <option value="Active">Active</option>
               <option value="Updated">Updated</option>
               <option value="Draft">Draft</option>
+              <option value="Admin">Admin</option>
             </select>
           </div>
 
@@ -1298,12 +1299,11 @@ let currentViewingDoc = null;
 let pendingUploadFile = null;
 
 async function loadDocuments() {
-    const uploadedByQuery = CU && CU.name ? `?uploaded_by=${encodeURIComponent(CU.name)}` : '';
     try {
-        const docs = await apiCall('/documents' + uploadedByQuery);
-        myDocuments = docs;
+        const docs = await apiCall('/documents');
+        myDocuments = docs || [];
         renderDocsTable();
-        return docs;
+        return myDocuments;
     } catch (err) {
         toast('er', 'Failed to load documents', err.message);
         return [];
@@ -1396,7 +1396,9 @@ function renderDocsTable() {
         );
     }
 
-    if (statusFilter !== 'All') {
+    if (statusFilter === 'Admin') {
+        filtered = filtered.filter(doc => /\badmin\b/i.test(doc.uploaded_by || ''));
+    } else if (statusFilter !== 'All') {
         filtered = filtered.filter(doc => doc.status === statusFilter);
     }
 
@@ -1412,11 +1414,14 @@ function renderDocsTable() {
         else if(doc.status === 'Draft') statusPill = '<span class="pill pill-muted">Draft</span>';
         else statusPill = `<span class="pill pill-muted">${doc.status}</span>`;
 
+        const isAdminDoc = /\badmin\b/i.test(doc.uploaded_by || '');
+        const sourceBadge = isAdminDoc ? '<span class="pill pill-dark" style="margin-left:6px;">Admin</span>' : '';
+
         tbody.innerHTML += `
             <tr class="clickable-row" onclick="openDocDetailsReal('${doc.id}')">
                 <td style="font-weight:600;">${doc.name}</td>
                 <td>${doc.version}</td>
-                <td>${statusPill}</td>
+                <td>${statusPill}${sourceBadge}</td>
             </tr>
         `;
     });
@@ -1438,7 +1443,8 @@ async function openDocDetailsReal(id) {
         if(doc.status === 'Active') statusPill = '<span class="pill pill-g">Active</span>';
         else if(doc.status === 'Updated') statusPill = '<span class="pill pill-b">Updated</span>';
         else statusPill = `<span class="pill pill-muted">${doc.status}</span>`;
-        document.getElementById('dd-status').innerHTML = statusPill;
+        const isAdminDoc = /\badmin\b/i.test(doc.uploaded_by || '');
+        document.getElementById('dd-status').innerHTML = `${statusPill}${isAdminDoc ? '<span class="pill pill-dark" style="margin-left:6px;">Admin</span>' : ''}`;
 
         const historyBody = document.getElementById('dd-history');
         historyBody.innerHTML = '';
@@ -1715,6 +1721,45 @@ function setAiPrompt(role, text) {
     document.getElementById(role + '-ai-question').value = text;
 }
 
+function escapeHtml(value) {
+    return String(value ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+let currentAiSource = null;
+
+async function openAiSource(id, type) {
+    if (type === 'document') {
+        window.open(`${API_BASE}/documents/${id}/download`, '_blank');
+        toast('in', 'Opening document', 'The knowledge-base file is being opened in a new tab.');
+        return;
+    }
+
+    try {
+        const tickets = await apiCall('/maintenance');
+        const ticket = tickets.find(t => t.id === id);
+        if (!ticket) throw new Error('Incident details were not found.');
+
+        currentAiSource = ticket;
+        document.getElementById('ai-source-title').textContent = `${ticket.ticket_id || 'Incident'} · ${ticket.system_name || 'Unknown system'}`;
+        document.getElementById('ai-source-body').innerHTML = `
+            <div style="display:grid; gap:12px; font-size:14px; color:var(--text); line-height:1.6;">
+                <div><strong>Status:</strong> ${escapeHtml(ticket.status || 'Open')}</div>
+                <div><strong>Severity:</strong> ${escapeHtml(ticket.severity || 'Unknown')}</div>
+                <div><strong>Issue Type:</strong> ${escapeHtml(ticket.issue_type || 'Unknown')}</div>
+                <div><strong>Description:</strong> ${escapeHtml(ticket.description || 'No description available.')}</div>
+                <div><strong>Resolution Notes:</strong> ${escapeHtml(ticket.resolution_notes || 'Pending resolution.')}</div>
+            </div>
+        `;
+        document.getElementById('ai-source-modal').classList.add('show');
+    } catch (err) {
+        toast('er', 'Incident details unavailable', err.message);
+    }
+}
+
+function closeAiSourceModal() {
+    document.getElementById('ai-source-modal').classList.remove('show');
+}
+
 function copyAiResponse() {
     const resp = document.getElementById('current-ai-response');
     if (!resp) {
@@ -1791,12 +1836,17 @@ async function aiAsk(role) {
             : (mode === 'summary' ? 'Executive Summary' : 'Answer'));
 
         const sourcesHTML = (result.sources && result.sources.length)
-            ? result.sources.map(s => `
-                <div style="display: flex; align-items: center; gap: 8px; background: #fff; padding: 8px 12px; border: 1px solid var(--border); border-radius: 8px;">
-                    <span style="font-family: monospace; font-size: 12px; color: var(--text);">📄 ${s.name} (${s.version})</span>
-                </div>
-              `).join('')
-            : `<div style="font-size:12px; color:var(--muted);">No matching internal documents were used for this answer.</div>`;
+            ? result.sources.map(s => {
+                const label = s.type === 'incident' ? `${escapeHtml(s.name)}` : `${escapeHtml(s.name)} (${escapeHtml(s.version)})`;
+                const icon = s.type === 'incident' ? '🚨' : '📄';
+                return `
+                    <button type="button" class="quick-prompt" onclick="openAiSource('${s.id}','${s.type}')" style="padding: 8px 12px; border-radius: 999px; display:inline-flex; align-items:center; gap:6px;">
+                        <span>${icon}</span>
+                        <span style="font-family: monospace; font-size: 12px; color: var(--text);">${label}</span>
+                    </button>
+                `;
+            }).join('')
+            : `<div style="font-size:12px; color:var(--muted);">No matching internal documents or incident records were used for this answer.</div>`;
 
         const formattedAnswer = result.answer
             .split(/\n\n+/)
