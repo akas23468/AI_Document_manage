@@ -2308,11 +2308,11 @@ from flask import Flask, request, jsonify, Response, send_from_directory
 
 @app.route("/")
 def home():
-    return send_from_directory(".", "admin.html")
-
-@app.route("/employee")
-def employee():
     return send_from_directory(".", "employee.html")
+
+@app.route("/admin")
+def employee():
+    return send_from_directory(".", "admin.html")
 # --------------------------------------------------------------------------
 if __name__ == "__main__":
     port = int(os.getenv("PORT", 5000))
