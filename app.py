@@ -2304,7 +2304,8 @@ Respond in clear, well-formatted plain text (short paragraphs / bullet points wh
         "model":   GROQ_MODEL_NAME,
     }), 200
 
-from flask import send_from_directory
+from flask import Flask, request, jsonify, Response, send_from_directory
+
 @app.route("/")
 def home():
     return send_from_directory(".", "admin.html")
