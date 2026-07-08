@@ -2310,8 +2310,12 @@ from flask import Flask, request, jsonify, Response, send_from_directory
 def home():
     return send_from_directory(".", "employee.html")
 
-@app.route("/admin")
+@app.route("/employee")
 def employee():
+    return send_from_directory(".", "employee.html")
+
+@app.route("/admin")
+def admin():
     return send_from_directory(".", "admin.html")
 # --------------------------------------------------------------------------
 if __name__ == "__main__":
